@@ -1,0 +1,848 @@
+* {
+    box-sizing: border-box;
+}
+
+
+body {
+    margin: 0;
+    font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+
+    background: #f1f4f7;
+    color: #17212b;
+}
+
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+
+.app {
+    min-height: 100vh;
+}
+
+
+/* =========================
+   TOP BAR
+========================= */
+
+.topbar {
+    height: 72px;
+    background: #ffffff;
+
+    border-bottom: 1px solid #dce2e7;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 0 28px;
+}
+
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+
+.brand-icon {
+    width: 40px;
+    height: 40px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: #d92d20;
+    color: white;
+
+    font-weight: 800;
+    border-radius: 8px;
+}
+
+
+.brand h1 {
+    margin: 0;
+
+    font-size: 19px;
+    letter-spacing: 1.2px;
+}
+
+
+.brand p {
+    margin: 3px 0 0;
+
+    font-size: 11px;
+    color: #68737d;
+}
+
+
+.system-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    font-size: 12px;
+    font-weight: 700;
+
+    color: #19733e;
+}
+
+
+.status-dot {
+    width: 9px;
+    height: 9px;
+
+    border-radius: 50%;
+    background: #22a05a;
+}
+
+
+/* =========================
+   DASHBOARD
+========================= */
+
+.dashboard {
+    display: grid;
+
+    grid-template-columns: 350px 1fr;
+
+    min-height: calc(100vh - 72px);
+}
+
+
+/* =========================
+   SIDEBAR
+========================= */
+
+.sidebar {
+    background: #ffffff;
+
+    border-right: 1px solid #dce2e7;
+
+    padding: 22px;
+
+    overflow-y: auto;
+}
+
+
+.dashboard-title {
+    display: flex;
+    justify-content: space-between;
+
+    margin-bottom: 18px;
+
+    font-weight: 800;
+    font-size: 13px;
+}
+
+
+.dashboard-title small {
+    color: #737f89;
+    font-size: 10px;
+}
+
+
+/* =========================
+   STATS
+========================= */
+
+.stats {
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, 1fr);
+
+    gap: 8px;
+
+    margin-bottom: 22px;
+}
+
+
+.stat-card {
+    padding: 12px;
+
+    border: 1px solid #e1e5e8;
+
+    border-radius: 7px;
+
+    background: #f8fafb;
+}
+
+
+.stat-card span {
+    display: block;
+
+    font-size: 9px;
+
+    color: #74808a;
+
+    font-weight: 700;
+}
+
+
+.stat-card strong {
+    display: block;
+
+    margin-top: 5px;
+
+    font-size: 22px;
+}
+
+
+.critical-stat strong {
+    color: #c62828;
+}
+
+
+/* =========================
+   SECTIONS
+========================= */
+
+.section-title {
+    font-size: 11px;
+
+    font-weight: 800;
+
+    letter-spacing: 0.8px;
+
+    color: #59656f;
+
+    margin-bottom: 10px;
+}
+
+
+/* =========================
+   INCIDENT FORM
+========================= */
+
+.incident-form {
+    border-top: 1px solid #e2e6e9;
+
+    padding-top: 18px;
+
+    margin-bottom: 22px;
+}
+
+
+.incident-form label {
+    display: block;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+    margin-bottom: 5px;
+
+    color: #46515a;
+}
+
+
+.incident-form input,
+.incident-form select,
+.incident-form textarea {
+    width: 100%;
+
+    border: 1px solid #d4dadd;
+
+    border-radius: 5px;
+
+    padding: 9px;
+
+    margin-bottom: 12px;
+
+    background: white;
+
+    color: #1d2933;
+}
+
+
+.incident-form textarea {
+    resize: vertical;
+}
+
+
+.coordinate-grid {
+    display: grid;
+
+    grid-template-columns: 1fr 1fr;
+
+    gap: 8px;
+}
+
+
+.coordinate-header {
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+}
+
+
+.use-map-location {
+    border: 0;
+
+    background: transparent;
+
+    color: #b42318;
+
+    font-size: 10px;
+
+    cursor: pointer;
+
+    font-weight: 700;
+}
+
+
+.map-location-info {
+    background: #f4f7f8;
+
+    border-left: 3px solid #d92d20;
+
+    padding: 8px;
+
+    font-size: 10px;
+
+    margin-bottom: 10px;
+}
+
+
+.form-error {
+    background: #fff1f0;
+
+    border: 1px solid #f3c3bf;
+
+    color: #b42318;
+
+    padding: 8px;
+
+    font-size: 11px;
+
+    margin-bottom: 10px;
+
+    border-radius: 5px;
+}
+
+
+.report-button {
+    width: 100%;
+
+    border: 0;
+
+    border-radius: 5px;
+
+    padding: 11px;
+
+    background: #c92a20;
+
+    color: white;
+
+    font-weight: 800;
+
+    font-size: 11px;
+
+    cursor: pointer;
+}
+
+
+.report-button:hover {
+    background: #ad2119;
+}
+
+
+.report-button:disabled {
+    opacity: 0.6;
+
+    cursor: wait;
+}
+
+
+/* =========================
+   INCIDENT LIST
+========================= */
+
+.incident-list {
+    border-top: 1px solid #e2e6e9;
+
+    padding-top: 18px;
+}
+
+
+.incident-item {
+    width: 100%;
+
+    border: 1px solid #e4e8eb;
+
+    background: white;
+
+    padding: 10px;
+
+    margin-bottom: 6px;
+
+    border-radius: 6px;
+
+    cursor: pointer;
+
+    text-align: left;
+
+    display: flex;
+
+    justify-content: space-between;
+
+    gap: 8px;
+}
+
+
+.incident-item:hover,
+.incident-item.selected {
+    border-color: #c92a20;
+
+    background: #fff9f8;
+}
+
+
+.incident-main strong {
+    display: block;
+
+    font-size: 11px;
+}
+
+
+.incident-main span {
+    display: block;
+
+    margin-top: 3px;
+
+    font-size: 10px;
+
+    color: #737e87;
+}
+
+
+.incident-meta {
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: flex-end;
+
+    gap: 4px;
+
+    font-size: 8px;
+
+    color: #69747d;
+}
+
+
+/* =========================
+   SEVERITY
+========================= */
+
+.severity-badge {
+    padding: 3px 6px;
+
+    border-radius: 4px;
+
+    font-size: 8px;
+
+    font-weight: 800;
+}
+
+
+.severity-badge.critical {
+    background: #ffe2e0;
+    color: #b42318;
+}
+
+
+.severity-badge.high {
+    background: #fff0d8;
+    color: #a15c00;
+}
+
+
+.severity-badge.medium {
+    background: #fff8cc;
+    color: #806500;
+}
+
+
+.severity-badge.low {
+    background: #e6f6eb;
+    color: #19733e;
+}
+
+
+/* =========================
+   MAIN CONTENT
+========================= */
+
+.main-content {
+    padding: 22px;
+
+    min-width: 0;
+}
+
+
+.map-header {
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    margin-bottom: 15px;
+}
+
+
+.map-header h2 {
+    margin: 0;
+
+    font-size: 20px;
+}
+
+
+.map-header p {
+    margin: 4px 0 0;
+
+    color: #727d86;
+
+    font-size: 12px;
+}
+
+
+.map-info {
+    display: flex;
+
+    gap: 15px;
+
+    font-size: 11px;
+
+    color: #66727c;
+}
+
+
+/* =========================
+   MAP
+========================= */
+
+.map-wrapper {
+    position: relative;
+
+    height: 540px;
+
+    border-radius: 8px;
+
+    overflow: hidden;
+
+    border: 1px solid #d7dde1;
+
+    box-shadow:
+        0 2px 7px
+        rgba(0, 0, 0, 0.06);
+}
+
+
+.main-map {
+    height: 100%;
+    width: 100%;
+}
+
+
+.map-legend {
+    position: absolute;
+
+    z-index: 1000;
+
+    bottom: 15px;
+
+    left: 15px;
+
+    background: white;
+
+    padding: 10px 12px;
+
+    border-radius: 6px;
+
+    box-shadow:
+        0 2px 8px
+        rgba(0, 0, 0, 0.15);
+
+    font-size: 10px;
+}
+
+
+.map-legend div {
+    display: flex;
+
+    align-items: center;
+
+    gap: 7px;
+
+    margin: 4px 0;
+}
+
+
+.legend-dot {
+    width: 9px;
+    height: 9px;
+
+    border-radius: 50%;
+
+    display: inline-block;
+}
+
+
+.station-dot {
+    background: #276ef1;
+}
+
+
+.incident-dot {
+    background: #d92d20;
+}
+
+
+.selected-dot {
+    background: #f79009;
+}
+
+
+/* =========================
+   POPUPS
+========================= */
+
+.popup h3 {
+    margin: 0 0 8px;
+
+    font-size: 14px;
+}
+
+
+.popup p {
+    margin: 5px 0;
+
+    font-size: 11px;
+}
+
+
+/* =========================
+   NEARBY STATIONS
+========================= */
+
+.nearby-panel {
+    margin-top: 15px;
+
+    background: white;
+
+    border: 1px solid #dce2e7;
+
+    border-radius: 8px;
+
+    padding: 17px;
+}
+
+
+.empty-panel p {
+    margin: 0;
+
+    color: #7a858e;
+
+    font-size: 12px;
+}
+
+
+.selected-incident {
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    padding: 10px;
+
+    background: #f7f9fa;
+
+    border-radius: 6px;
+
+    margin-bottom: 12px;
+
+    font-size: 11px;
+}
+
+
+.station-results {
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, 1fr);
+
+    gap: 10px;
+}
+
+
+.station-result {
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    border: 1px solid #e1e5e8;
+
+    padding: 11px;
+
+    border-radius: 6px;
+
+    background: white;
+}
+
+
+.station-rank {
+    width: 27px;
+    height: 27px;
+
+    border-radius: 50%;
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    background: #edf3ff;
+
+    color: #275db7;
+
+    font-weight: 800;
+
+    font-size: 11px;
+}
+
+
+.station-info {
+    flex: 1;
+
+    min-width: 0;
+}
+
+
+.station-info strong {
+    display: block;
+
+    font-size: 11px;
+}
+
+
+.station-info span {
+    display: block;
+
+    font-size: 9px;
+
+    color: #7a858e;
+
+    margin-top: 3px;
+}
+
+
+.station-distance {
+    text-align: right;
+}
+
+
+.station-distance strong {
+    display: block;
+
+    font-size: 11px;
+}
+
+
+.station-distance span {
+    font-size: 8px;
+
+    color: #6c7780;
+}
+
+
+/* =========================
+   GENERAL
+========================= */
+
+.loading,
+.empty-message {
+    padding: 12px;
+
+    text-align: center;
+
+    color: #78838c;
+
+    font-size: 11px;
+}
+
+
+.connection-error {
+    background: #fff0ef;
+
+    color: #b42318;
+
+    padding: 9px 20px;
+
+    text-align: center;
+
+    font-size: 12px;
+}
+
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 1000px) {
+
+    .dashboard {
+        grid-template-columns: 300px 1fr;
+    }
+
+    .station-results {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+
+@media (max-width: 750px) {
+
+    .dashboard {
+        display: block;
+    }
+
+    .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid #dce2e7;
+    }
+
+    .map-wrapper {
+        height: 450px;
+    }
+
+    .topbar {
+        padding: 0 15px;
+    }
+
+    .system-status {
+        display: none;
+    }
+
+}
+

@@ -1,0 +1,31 @@
+incident_id,source_dataset,incident_type,severity,description,latitude,longitude,reported_at,status
+INC1001,RescueRoute Demo Incident Dataset,Building Fire,HIGH,Residential building fire,13.0827,80.2707,2026-09-01 08:15:00,PENDING
+INC1002,RescueRoute Demo Incident Dataset,Vehicle Fire,MEDIUM,Vehicle fire reported on main road,13.0475,80.2491,2026-09-01 09:40:00,PENDING
+INC1003,RescueRoute Demo Incident Dataset,Commercial Fire,HIGH,Fire reported in commercial building,13.0674,80.2731,2026-09-01 10:25:00,DISPATCHED
+INC1004,RescueRoute Demo Incident Dataset,Residential Fire,HIGH,Kitchen fire in residential area,13.0780,80.2437,2026-09-01 11:10:00,ACTIVE
+INC1005,RescueRoute Demo Incident Dataset,Industrial Fire,CRITICAL,Industrial smoke and fire reported,13.1625,80.2642,2026-09-01 12:30:00,PENDING
+INC1006,RescueRoute Demo Incident Dataset,Electrical Fire,MEDIUM,Electrical short circuit caused fire,13.1136,80.2555,2026-09-01 13:20:00,RESOLVED
+INC1007,RescueRoute Demo Incident Dataset,Building Fire,HIGH,Multi-storey building fire,13.1210,80.2386,2026-09-01 14:05:00,DISPATCHED
+INC1008,RescueRoute Demo Incident Dataset,Vehicle Fire,MEDIUM,Two-wheeler fire reported,13.0349,80.1737,2026-09-01 15:15:00,RESOLVED
+INC1009,RescueRoute Demo Incident Dataset,Residential Fire,HIGH,Residential fire with smoke spread,12.9853,80.2598,2026-09-01 16:10:00,PENDING
+INC1010,RescueRoute Demo Incident Dataset,Commercial Fire,HIGH,Shop fire reported,13.0432,80.2778,2026-09-01 17:00:00,ACTIVE
+INC1011,RescueRoute Demo Incident Dataset,Building Fire,CRITICAL,Large building fire requiring multiple units,13.0865,80.2861,2026-09-02 08:30:00,DISPATCHED
+INC1012,RescueRoute Demo Incident Dataset,Electrical Fire,MEDIUM,Transformer fire reported,13.1057,80.2781,2026-09-02 09:25:00,RESOLVED
+INC1013,RescueRoute Demo Incident Dataset,Industrial Fire,HIGH,Warehouse fire reported,13.1968,80.3115,2026-09-02 10:40:00,PENDING
+INC1014,RescueRoute Demo Incident Dataset,Residential Fire,MEDIUM,Small residential fire,13.0954,80.1644,2026-09-02 11:35:00,RESOLVED
+INC1015,RescueRoute Demo Incident Dataset,Vehicle Fire,HIGH,Vehicle fire blocking road,13.1215,80.2656,2026-09-02 12:20:00,DISPATCHED
+INC1016,RescueRoute Demo Incident Dataset,Commercial Fire,HIGH,Restaurant fire reported,13.0858,80.2628,2026-09-02 13:15:00,ACTIVE
+INC1017,RescueRoute Demo Incident Dataset,Building Fire,CRITICAL,Fire reported in crowded commercial area,13.1022,80.2781,2026-09-02 14:10:00,PENDING
+INC1018,RescueRoute Demo Incident Dataset,Residential Fire,MEDIUM,House fire with minor smoke spread,13.0350,80.2127,2026-09-02 15:00:00,RESOLVED
+INC1019,RescueRoute Demo Incident Dataset,Electrical Fire,HIGH,Electrical equipment fire,13.0690,80.1940,2026-09-02 16:20:00,DISPATCHED
+INC1020,RescueRoute Demo Incident Dataset,Industrial Fire,CRITICAL,Factory fire reported,13.2575,80.3315,2026-09-02 17:30:00,PENDING
+INC1021,RescueRoute Demo Incident Dataset,Building Fire,HIGH,Apartment fire reported,13.1050,80.1960,2026-09-03 08:10:00,ACTIVE
+INC1022,RescueRoute Demo Incident Dataset,Vehicle Fire,MEDIUM,Car fire reported near junction,13.0453,80.1143,2026-09-03 09:05:00,RESOLVED
+INC1023,RescueRoute Demo Incident Dataset,Commercial Fire,HIGH,Commercial building smoke and fire,13.2035,80.1943,2026-09-03 10:15:00,PENDING
+INC1024,RescueRoute Demo Incident Dataset,Residential Fire,HIGH,Residential building fire,13.0290,80.2360,2026-09-03 11:25:00,DISPATCHED
+INC1025,RescueRoute Demo Incident Dataset,Electrical Fire,MEDIUM,Electrical panel fire,13.0340,80.2308,2026-09-03 12:40:00,RESOLVED
+INC1026,RescueRoute Demo Incident Dataset,Building Fire,HIGH,Office building fire alarm and smoke,13.0215,80.2250,2026-09-03 13:30:00,ACTIVE
+INC1027,RescueRoute Demo Incident Dataset,Vehicle Fire,HIGH,Heavy vehicle fire reported,13.1143,80.2962,2026-09-03 14:45:00,PENDING
+INC1028,RescueRoute Demo Incident Dataset,Industrial Fire,CRITICAL,Industrial facility fire,13.2509,80.3028,2026-09-03 15:50:00,DISPATCHED
+INC1029,RescueRoute Demo Incident Dataset,Commercial Fire,MEDIUM,Market shop fire reported,13.0690,80.1940,2026-09-03 17:05:00,RESOLVED
+INC1030,RescueRoute Demo Incident Dataset,Building Fire,HIGH,Building fire requiring emergency response,13.1111,80.2944,2026-09-03 18:20:00,PENDINGGet-ChildItem
