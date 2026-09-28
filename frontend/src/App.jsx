@@ -1,21 +1,40 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import MapView from "./components/MapView";
 import IncidentForm from "./components/IncidentForm";
 import NearbyStations from "./components/NearbyStations";
 import DispatchPanel from "./components/DispatchPanel";
+import AnalyticsView from "./components/AnalyticsView";
+
+import useTruckTracking from "./hooks/useTruckTracking";
 
 import {
     getIncidents,
     getStations,
     getNearbyStations,
-    getTrucks
+    getTrucks,
+    getIncidentRoutes,
+    previewRoute
 } from "./services/api";
 
 import "./App.css";
 
 
 function App() {
+
+    // "operations" (Modules 1-4) or "analytics" (Module 5).
+    // The URL hash (#analytics) keeps the view bookmarkable.
+    const [view, setViewState] =
+        useState(() =>
+            window.location.hash === "#analytics"
+                ? "analytics"
+                : "operations"
+        );
+
+    const setView = (next) => {
+        setViewState(next);
+        window.history.replaceState(null, "", `#${next}`);
+    };
 
     const [incidents, setIncidents] =
         useState([]);
@@ -31,6 +50,32 @@ function App() {
 
     const [nearbyStations, setNearbyStations] =
         useState([]);
+
+    // Module 3: routes of assigned trucks + one previewed route
+    const [routes, setRoutes] =
+        useState([]);
+
+    const [routePreview, setRoutePreview] =
+        useState(null);
+
+    // Module 4: live truck positions and server-pushed
+    // dispatch changes (e.g. a truck arriving on scene)
+    const {
+        liveTrucks,
+        connected: trackingConnected,
+        dispatchEvent
+    } = useTruckTracking();
+
+    const [dispatchRefreshKey, setDispatchRefreshKey] =
+        useState(0);
+
+    const handleDispatchChangedRef =
+        useRef(null);
+
+    // Guards against a slow response for a previously
+    // selected incident overwriting the current one
+    const selectedIncidentIdRef =
+        useRef(null);
 
     const [selectedLocation, setSelectedLocation] =
         useState(null);
@@ -95,14 +140,47 @@ function App() {
     }, []);
 
 
+    const loadRoutes =
+        async (incidentId) => {
+
+            try {
+
+                const data =
+                    await getIncidentRoutes(
+                        incidentId
+                    );
+
+                if (
+                    selectedIncidentIdRef.current ===
+                    incidentId
+                ) {
+                    setRoutes(data.routes);
+                }
+
+            } catch (err) {
+
+                console.error(err);
+            }
+        };
+
+
     const handleIncidentSelect =
         async (incident) => {
+
+            selectedIncidentIdRef.current =
+                incident.incident_id;
 
             setSelectedIncident(incident);
 
             setNearbyStations([]);
 
+            setRoutes([]);
+
+            setRoutePreview(null);
+
             setLoadingNearby(true);
+
+            loadRoutes(incident.incident_id);
 
 
             try {
@@ -161,6 +239,10 @@ function App() {
                 setSelectedIncident(updated);
             }
 
+            setRoutePreview(null);
+
+            loadRoutes(selectedIncident.incident_id);
+
             try {
 
                 const data =
@@ -171,6 +253,74 @@ function App() {
                 setNearbyStations(
                     data.nearbyStations
                 );
+
+            } catch (err) {
+
+                console.error(err);
+            }
+        };
+
+
+    useEffect(() => {
+        handleDispatchChangedRef.current =
+            handleDispatchChanged;
+    });
+
+
+    // Module 4: refresh when the server reports a dispatch
+    // change. Debounced, because one auto-dispatch sends an
+    // event per truck.
+    useEffect(() => {
+
+        if (!dispatchEvent) {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            handleDispatchChangedRef.current?.();
+
+            setDispatchRefreshKey(
+                (key) => key + 1
+            );
+        }, 300);
+
+        return () => clearTimeout(timer);
+
+    }, [dispatchEvent]);
+
+
+    const deployedTruckCount =
+        [...liveTrucks.values()].filter(
+            (truck) =>
+                ["DISPATCHED", "EN_ROUTE", "ON_SCENE"]
+                    .includes(truck.status)
+        ).length;
+
+
+    // Module 3: show / hide the road route a truck would take
+    const handlePreviewRoute =
+        async (truck) => {
+
+            if (
+                routePreview?.truck_id ===
+                truck.truck_id
+            ) {
+                setRoutePreview(null);
+                return;
+            }
+
+            try {
+
+                const data =
+                    await previewRoute(
+                        selectedIncident.incident_id,
+                        truck.truck_id
+                    );
+
+                setRoutePreview({
+                    ...data,
+                    truck_id: truck.truck_id
+                });
 
             } catch (err) {
 
@@ -230,11 +380,44 @@ function App() {
                 </div>
 
 
+                <nav className="view-tabs" aria-label="View">
+
+                    <button
+                        type="button"
+                        className={view === "operations" ? "active" : ""}
+                        onClick={() => setView("operations")}
+                    >
+                        OPERATIONS
+                    </button>
+
+                    <button
+                        type="button"
+                        className={view === "analytics" ? "active" : ""}
+                        onClick={() => setView("analytics")}
+                    >
+                        ANALYTICS
+                    </button>
+
+                </nav>
+
+
                 <div className="system-status">
 
                     <span className="status-dot"></span>
 
                     SYSTEM ONLINE
+
+                    <span
+                        className={`tracking-status ${
+                            trackingConnected
+                                ? "live"
+                                : "offline"
+                        }`}
+                    >
+                        {trackingConnected
+                            ? "● LIVE TRACKING"
+                            : "○ TRACKING OFFLINE"}
+                    </span>
 
                 </div>
 
@@ -247,6 +430,12 @@ function App() {
                 </div>
             )}
 
+
+            {view === "analytics" ? (
+
+                <AnalyticsView />
+
+            ) : (
 
             <main className="dashboard">
 
@@ -463,6 +652,11 @@ function App() {
                                 {" "}stations
                             </span>
 
+                            <span>
+                                ● {deployedTruckCount}
+                                {" "}trucks deployed
+                            </span>
+
                         </div>
 
                     </div>
@@ -473,6 +667,13 @@ function App() {
                         stations={stations}
                         selectedIncident={
                             selectedIncident
+                        }
+                        routes={routes}
+                        routePreview={
+                            routePreview
+                        }
+                        liveTrucks={
+                            liveTrucks
                         }
                         selectedLocation={
                             selectedLocation
@@ -506,11 +707,25 @@ function App() {
                         onDispatchChanged={
                             handleDispatchChanged
                         }
+                        routePreview={
+                            routePreview
+                        }
+                        onPreviewRoute={
+                            handlePreviewRoute
+                        }
+                        liveTrucks={
+                            liveTrucks
+                        }
+                        refreshKey={
+                            dispatchRefreshKey
+                        }
                     />
 
                 </section>
 
             </main>
+
+            )}
 
         </div>
     );

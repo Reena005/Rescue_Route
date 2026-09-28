@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
     getIncidentDispatches,
@@ -37,9 +37,23 @@ function formatTime(value) {
 }
 
 
+// Module 3: "9.2 min" or "~15.3 min" for fallback estimates
+function formatEta(minutes, source) {
+    if (minutes === null || minutes === undefined) {
+        return "ETA pending";
+    }
+
+    return `${source === "ESTIMATE" ? "~" : ""}${minutes} min`;
+}
+
+
 export default function DispatchPanel({
     incident,
-    onDispatchChanged
+    onDispatchChanged,
+    routePreview,
+    onPreviewRoute,
+    liveTrucks,
+    refreshKey
 }) {
 
     const [dispatches, setDispatches] =
@@ -80,6 +94,8 @@ export default function DispatchPanel({
 
     const incidentId = incident?.incident_id;
 
+    const loadedIncidentRef = useRef(null);
+
 
     useEffect(() => {
 
@@ -89,10 +105,16 @@ export default function DispatchPanel({
 
         let ignore = false;
 
-        setLoading(true);
-        setError("");
-        setDispatches([]);
-        setRecommendation(null);
+        // Live refreshes (Module 4) reload quietly; only a newly
+        // selected incident shows the loading state
+        if (loadedIncidentRef.current !== incidentId) {
+            loadedIncidentRef.current = incidentId;
+
+            setLoading(true);
+            setError("");
+            setDispatches([]);
+            setRecommendation(null);
+        }
 
         loadDispatchData(incidentId)
             .then((data) => {
@@ -116,7 +138,7 @@ export default function DispatchPanel({
             ignore = true;
         };
 
-    }, [incidentId, loadDispatchData]);
+    }, [incidentId, loadDispatchData, refreshKey]);
 
 
     // Run a dispatch action, then refresh this panel and the dashboard
@@ -253,9 +275,47 @@ export default function DispatchPanel({
                                         </span>
 
                                         <span>
-                                            {d.distance_km} km · sent{" "}
+                                            {d.road_distance_km ?? d.distance_km} km
+                                            {" "}· sent{" "}
                                             {formatTime(d.dispatched_at)}
                                         </span>
+
+                                        <span className="eta-line">
+                                            {d.status === "ON_SCENE"
+                                                ? `Arrived ${formatTime(d.arrived_at)}` +
+                                                  (d.actual_travel_minutes !== null
+                                                      ? ` · took ${d.actual_travel_minutes} min`
+                                                      : "")
+                                                : `ETA ${formatEta(d.eta_minutes, d.route_source)}` +
+                                                  (d.expected_arrival_at
+                                                      ? ` · arrives ${formatTime(d.expected_arrival_at)}`
+                                                      : "")}
+                                        </span>
+
+                                        {/* Module 4: live position while driving */}
+                                        {(() => {
+                                            const live =
+                                                liveTrucks?.get(d.truck_id);
+
+                                            if (
+                                                d.status !== "EN_ROUTE" ||
+                                                !live ||
+                                                live.dispatch_id !== d.dispatch_id ||
+                                                live.remaining_km === null
+                                            ) {
+                                                return null;
+                                            }
+
+                                            return (
+                                                <span className="live-line">
+                                                    ● LIVE · {live.remaining_km} km left
+                                                    {live.remaining_eta_min !== null &&
+                                                        ` · ~${live.remaining_eta_min} min`}
+                                                    {live.speed_kmh > 0 &&
+                                                        ` · ${live.speed_kmh} km/h`}
+                                                </span>
+                                            );
+                                        })()}
 
                                     </div>
 
@@ -327,7 +387,7 @@ export default function DispatchPanel({
 
                         <div className="dispatch-subtitle">
 
-                            NEAREST AVAILABLE TRUCKS
+                            FASTEST AVAILABLE TRUCKS (BY ROAD)
 
                         </div>
 
@@ -353,7 +413,7 @@ export default function DispatchPanel({
                                     ? "DISPATCHING..."
                                     : `AUTO DISPATCH ${
                                         recommendation?.recommended_count || 1
-                                    } NEAREST (${incident.severity})`}
+                                    } FASTEST (${incident.severity})`}
                             </button>
                         )}
 
@@ -387,27 +447,57 @@ export default function DispatchPanel({
 
                                         <span>
                                             {truck.fire_station_name} ·{" "}
-                                            {truck.distance_km} km
+                                            {truck.road_distance_km} km by road
+                                        </span>
+
+                                        <span className="eta-line">
+                                            ETA{" "}
+                                            {formatEta(
+                                                truck.eta_minutes,
+                                                truck.route_source
+                                            )}
                                         </span>
 
                                     </div>
 
 
-                                    <button
-                                        type="button"
-                                        className="action-button"
-                                        disabled={working}
-                                        onClick={() =>
-                                            runAction(() =>
-                                                dispatchTrucks(
-                                                    incident.incident_id,
-                                                    [truck.truck_id]
+                                    <div className="dispatch-actions">
+
+                                        <button
+                                            type="button"
+                                            className={
+                                                routePreview?.truck_id ===
+                                                truck.truck_id
+                                                    ? "action-button secondary active"
+                                                    : "action-button secondary"
+                                            }
+                                            onClick={() =>
+                                                onPreviewRoute(truck)
+                                            }
+                                        >
+                                            {routePreview?.truck_id ===
+                                            truck.truck_id
+                                                ? "Hide"
+                                                : "Route"}
+                                        </button>
+    
+                                        <button
+                                            type="button"
+                                            className="action-button"
+                                            disabled={working}
+                                            onClick={() =>
+                                                runAction(() =>
+                                                    dispatchTrucks(
+                                                        incident.incident_id,
+                                                        [truck.truck_id]
+                                                    )
                                                 )
-                                            )
-                                        }
-                                    >
-                                        Dispatch
-                                    </button>
+                                            }
+                                        >
+                                            Dispatch
+                                        </button>
+
+                                    </div>
 
                                 </div>
                             ))

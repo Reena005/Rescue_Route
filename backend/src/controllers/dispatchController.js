@@ -1,5 +1,13 @@
 const pool = require("../config/db");
 
+const { getTravelTimes } = require("../services/routingService");
+
+const { saveDispatchRoutes } = require("./routeController");
+
+const tracker = require("../services/trackingService");
+
+const simulator = require("../services/truckSimulator");
+
 
 // How many trucks to send by default for each severity
 const TRUCKS_BY_SEVERITY = {
@@ -14,6 +22,10 @@ const OPEN_DISPATCH_STATUSES = [
     "EN_ROUTE",
     "ON_SCENE"
 ];
+
+// How many nearest trucks (by straight line) are re-ranked by
+// road travel time (Module 3)
+const CANDIDATE_POOL_SIZE = 10;
 
 // Allowed dispatch status transitions
 const NEXT_STATUSES = {
@@ -50,7 +62,16 @@ const DISPATCH_COLUMNS = `
     d.en_route_at,
     d.arrived_at,
     d.completed_at,
-    d.notes
+    d.notes,
+    dr.road_distance_km,
+    dr.eta_minutes,
+    dr.route_source,
+    d.dispatched_at + dr.eta_minutes * INTERVAL '1 minute'
+        AS expected_arrival_at,
+    ROUND(
+        (EXTRACT(EPOCH FROM (d.arrived_at - d.dispatched_at)) / 60)::numeric,
+        1
+    ) AS actual_travel_minutes
 `;
 
 const DISPATCH_FROM = `
@@ -58,11 +79,108 @@ const DISPATCH_FROM = `
     JOIN incidents i ON i.incident_id = d.incident_id
     JOIN fire_trucks ft ON ft.truck_id = d.truck_id
     JOIN fire_stations fs ON fs.station_id = d.station_id
+    LEFT JOIN dispatch_routes dr ON dr.dispatch_id = d.dispatch_id
 `;
 
 
 const getRecommendedCount = (severity) =>
     TRUCKS_BY_SEVERITY[severity] || 1;
+
+
+// Available trucks for an incident, ranked by road travel time.
+// PostGIS narrows the fleet to the nearest candidates by straight
+// line (Module 1), then OSRM re-ranks them by actual driving time
+// from their station (Module 3).
+const findRankedAvailableTrucks = async (incidentId) => {
+    const result = await pool.query(`
+        SELECT
+            ft.truck_id,
+            ft.truck_type,
+            ft.registration_number,
+            ft.water_capacity_liters,
+            ft.crew_capacity,
+            fs.station_id,
+            fs.fire_station_name,
+            fs.division_name,
+            fs.latitude AS station_latitude,
+            fs.longitude AS station_longitude,
+            i.latitude AS incident_latitude,
+            i.longitude AS incident_longitude,
+            ROUND(
+                (ST_Distance(i.location, fs.location) / 1000)::numeric,
+                2
+            ) AS distance_km
+        FROM incidents i
+        JOIN fire_stations fs
+            ON fs.location IS NOT NULL
+        JOIN fire_trucks ft
+            ON ft.station_id = fs.station_id
+        WHERE i.incident_id = $1
+          AND ft.status = 'AVAILABLE'
+        ORDER BY ST_Distance(i.location, fs.location), ft.truck_id
+        LIMIT $2;
+    `, [incidentId, CANDIDATE_POOL_SIZE]);
+
+    if (result.rows.length === 0) {
+        return [];
+    }
+
+    const incidentPoint = {
+        latitude: result.rows[0].incident_latitude,
+        longitude: result.rows[0].incident_longitude
+    };
+
+
+    // One travel-time lookup per station, not per truck
+    const stations = [
+        ...new Map(
+            result.rows.map((row) => [
+                row.station_id,
+                {
+                    station_id: row.station_id,
+                    latitude: row.station_latitude,
+                    longitude: row.station_longitude
+                }
+            ])
+        ).values()
+    ];
+
+    const travelTimes =
+        await getTravelTimes(stations, incidentPoint);
+
+    const travelByStation = new Map(
+        stations.map((station, index) => [
+            station.station_id,
+            travelTimes[index]
+        ])
+    );
+
+
+    return result.rows
+        .map((row) => {
+            const {
+                station_latitude,
+                station_longitude,
+                incident_latitude,
+                incident_longitude,
+                ...truck
+            } = row;
+
+            const travel = travelByStation.get(row.station_id);
+
+            return {
+                ...truck,
+                road_distance_km: travel.distance_km,
+                eta_minutes: travel.duration_min,
+                route_source: travel.source
+            };
+        })
+        .sort((a, b) =>
+            a.eta_minutes - b.eta_minutes ||
+            Number(a.distance_km) - Number(b.distance_km) ||
+            a.truck_id.localeCompare(b.truck_id)
+        );
+};
 
 
 // Recompute incident status from its dispatches.
@@ -165,8 +283,8 @@ const getIncidentDispatches = async (req, res) => {
 
 
 // GET /api/dispatches/recommend/:incidentId
-// Nearest AVAILABLE trucks to an incident (Module 1 spatial
-// lookup + Module 2 availability).
+// AVAILABLE trucks for an incident, fastest first (Module 1
+// spatial lookup + Module 2 availability + Module 3 road ETA).
 const getDispatchRecommendations = async (req, res) => {
     try {
         const { incidentId } = req.params;
@@ -191,36 +309,15 @@ const getDispatchRecommendations = async (req, res) => {
 
         const incident = incidentResult.rows[0];
 
-        const result = await pool.query(`
-            SELECT
-                ft.truck_id,
-                ft.truck_type,
-                ft.registration_number,
-                ft.water_capacity_liters,
-                ft.crew_capacity,
-                fs.station_id,
-                fs.fire_station_name,
-                fs.division_name,
-                ROUND(
-                    (ST_Distance(i.location, fs.location) / 1000)::numeric,
-                    2
-                ) AS distance_km
-            FROM incidents i
-            JOIN fire_stations fs
-                ON fs.location IS NOT NULL
-            JOIN fire_trucks ft
-                ON ft.station_id = fs.station_id
-            WHERE i.incident_id = $1
-              AND ft.status = 'AVAILABLE'
-            ORDER BY distance_km, ft.truck_id
-            LIMIT 10;
-        `, [incidentId]);
+        const availableTrucks =
+            await findRankedAvailableTrucks(incidentId);
 
         res.json({
             incident,
             recommended_count: getRecommendedCount(incident.severity),
-            count: result.rows.length,
-            availableTrucks: result.rows
+            ranked_by: "road_eta",
+            count: availableTrucks.length,
+            availableTrucks
         });
 
     } catch (error) {
@@ -237,8 +334,8 @@ const getDispatchRecommendations = async (req, res) => {
 // POST /api/dispatches
 // Body:
 //   { incident_id, truck_ids: ["TRK-CHN001-WT"] }  -> dispatch these trucks
-//   { incident_id, count: 2 }                      -> nearest N available
-//   { incident_id }                                -> nearest N by severity
+//   { incident_id, count: 2 }                      -> fastest N available
+//   { incident_id }                                -> fastest N by severity
 const createDispatch = async (req, res) => {
     const { incident_id, truck_ids, count, notes } = req.body;
 
@@ -264,6 +361,26 @@ const createDispatch = async (req, res) => {
         return res.status(400).json({
             message: "count must be a whole number between 1 and 10"
         });
+    }
+
+    // Rank candidates by road ETA before opening the transaction,
+    // so no locks are held while waiting on the routing engine
+    let rankedTruckIds = [];
+
+    if (!truck_ids) {
+        try {
+            rankedTruckIds = (
+                await findRankedAvailableTrucks(incident_id)
+            ).map((truck) => truck.truck_id);
+
+        } catch (error) {
+            console.error("Error ranking trucks:", error);
+
+            return res.status(500).json({
+                message: "Failed to rank available trucks",
+                error: error.message
+            });
+        }
     }
 
     const client = await pool.connect();
@@ -350,6 +467,8 @@ const createDispatch = async (req, res) => {
         } else {
             const wanted = count || getRecommendedCount(incident.severity);
 
+            // Take the fastest candidates that are still available,
+            // skipping any another dispatcher has just locked
             const result = await client.query(`
                 SELECT
                     ft.truck_id,
@@ -358,17 +477,17 @@ const createDispatch = async (req, res) => {
                         (ST_Distance(i.location, fs.location) / 1000)::numeric,
                         2
                     ) AS distance_km
-                FROM incidents i
+                FROM fire_trucks ft
                 JOIN fire_stations fs
-                    ON fs.location IS NOT NULL
-                JOIN fire_trucks ft
-                    ON ft.station_id = fs.station_id
-                WHERE i.incident_id = $1
+                    ON fs.station_id = ft.station_id
+                JOIN incidents i
+                    ON i.incident_id = $1
+                WHERE ft.truck_id = ANY($2::varchar[])
                   AND ft.status = 'AVAILABLE'
-                ORDER BY ST_Distance(i.location, fs.location), ft.truck_id
-                LIMIT $2
+                ORDER BY array_position($2::varchar[], ft.truck_id)
+                LIMIT $3
                 FOR UPDATE OF ft SKIP LOCKED;
-            `, [incident_id, wanted]);
+            `, [incident_id, rankedTruckIds, wanted]);
 
             if (result.rows.length === 0) {
                 await client.query("ROLLBACK");
@@ -418,14 +537,25 @@ const createDispatch = async (req, res) => {
         const incidentStatus =
             await syncIncidentStatus(client, incident_id);
 
-        const created = await client.query(`
+        await client.query("COMMIT");
+
+
+        // Module 3: calculate and store each truck's road route
+        await saveDispatchRoutes(dispatchIds);
+
+        const created = await pool.query(`
             SELECT ${DISPATCH_COLUMNS}
             ${DISPATCH_FROM}
             WHERE d.dispatch_id = ANY($1::int[])
-            ORDER BY d.distance_km, d.dispatch_id;
+            ORDER BY dr.eta_minutes NULLS LAST, d.dispatch_id;
         `, [dispatchIds]);
 
-        await client.query("COMMIT");
+        // Module 4: trucks are now committed at their station
+        await Promise.all(
+            created.rows.map((d) =>
+                afterStatusChange(d, "DISPATCHED", incidentStatus, "api")
+            )
+        );
 
         const requested = truck_ids
             ? truck_ids.length
@@ -464,20 +594,75 @@ const createDispatch = async (req, res) => {
 };
 
 
-// PATCH /api/dispatches/:dispatchId/status
-// Body: { status: "EN_ROUTE" | "ON_SCENE" | "COMPLETED" | "CANCELLED" }
-const updateDispatchStatus = async (req, res) => {
-    const { dispatchId } = req.params;
-    const status = req.body.status?.toUpperCase();
+class DispatchError extends Error {
+    constructor(statusCode, message) {
+        super(message);
+        this.statusCode = statusCode;
+    }
+}
 
-    if (!STATUS_TIMESTAMP[status]) {
-        return res.status(400).json({
-            message:
-                "Status must be EN_ROUTE, ON_SCENE, COMPLETED or CANCELLED"
+
+// Module 4: keep live tracking in step with a dispatch change.
+// Tracking problems are logged, never thrown, so they can never
+// undo or fail a dispatch update.
+const afterStatusChange = async (dispatch, status, incidentStatus, source) => {
+    try {
+        if (status === "DISPATCHED") {
+            await tracker.placeAtStation(dispatch.truck_id, "DISPATCHED");
+
+        } else if (status === "EN_ROUTE") {
+            await simulator.startTrip(dispatch.dispatch_id);
+
+        } else if (status === "ON_SCENE") {
+            simulator.stopTrip(dispatch.dispatch_id);
+
+            await tracker.placeAtIncident(
+                dispatch.truck_id,
+                dispatch.dispatch_id,
+                dispatch.incident_id
+            );
+
+        } else {
+            // COMPLETED / CANCELLED: truck returns to its station
+            simulator.stopTrip(dispatch.dispatch_id);
+
+            await tracker.placeAtStation(dispatch.truck_id, "AVAILABLE");
+        }
+
+        await tracker.publishDispatchChange({
+            dispatch_id: dispatch.dispatch_id,
+            incident_id: dispatch.incident_id,
+            truck_id: dispatch.truck_id,
+            status,
+            incident_status: incidentStatus,
+            source
         });
+
+    } catch (error) {
+        console.error(
+            `Tracking update failed for dispatch ${dispatch.dispatch_id}:`,
+            error
+        );
+    }
+};
+
+
+// Move a dispatch to a new status and keep the truck, incident
+// and live tracking in step. Used by the API and by Module 4
+// when a truck arrives on its own (source = "tracking").
+// Throws DispatchError for invalid requests.
+const changeDispatchStatus = async (dispatchId, status, source = "api") => {
+    if (!STATUS_TIMESTAMP[status]) {
+        throw new DispatchError(
+            400,
+            "Status must be EN_ROUTE, ON_SCENE, COMPLETED or CANCELLED"
+        );
     }
 
     const client = await pool.connect();
+
+    let dispatch;
+    let incidentStatus;
 
     try {
         await client.query("BEGIN");
@@ -490,22 +675,16 @@ const updateDispatchStatus = async (req, res) => {
         `, [dispatchId]);
 
         if (current.rows.length === 0) {
-            await client.query("ROLLBACK");
-
-            return res.status(404).json({
-                message: "Dispatch not found"
-            });
+            throw new DispatchError(404, "Dispatch not found");
         }
 
-        const dispatch = current.rows[0];
+        dispatch = current.rows[0];
 
         if (!NEXT_STATUSES[dispatch.status].includes(status)) {
-            await client.query("ROLLBACK");
-
-            return res.status(409).json({
-                message:
-                    `Cannot change dispatch from ${dispatch.status} to ${status}`
-            });
+            throw new DispatchError(
+                409,
+                `Cannot change dispatch from ${dispatch.status} to ${status}`
+            );
         }
 
 
@@ -533,25 +712,69 @@ const updateDispatchStatus = async (req, res) => {
         `, [dispatch.truck_id, truckStatus]);
 
 
-        const incidentStatus =
+        incidentStatus =
             await syncIncidentStatus(client, dispatch.incident_id);
-
-        const updated = await client.query(`
-            SELECT ${DISPATCH_COLUMNS}
-            ${DISPATCH_FROM}
-            WHERE d.dispatch_id = $1;
-        `, [dispatchId]);
 
         await client.query("COMMIT");
 
+    } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+
+    } finally {
+        client.release();
+    }
+
+
+    await afterStatusChange(dispatch, status, incidentStatus, source);
+
+    const updated = await pool.query(`
+        SELECT ${DISPATCH_COLUMNS}
+        ${DISPATCH_FROM}
+        WHERE d.dispatch_id = $1;
+    `, [dispatchId]);
+
+    return {
+        incident_status: incidentStatus,
+        dispatch: updated.rows[0]
+    };
+};
+
+
+// Module 4: a simulated truck reached its incident
+simulator.onArrival(async (dispatchId) => {
+    try {
+        await changeDispatchStatus(dispatchId, "ON_SCENE", "tracking");
+
+    } catch (error) {
+        // Already moved on (e.g. cancelled) - nothing to do
+        if (!(error instanceof DispatchError)) {
+            console.error(`Arrival update failed for dispatch ${dispatchId}:`, error);
+        }
+    }
+});
+
+
+// PATCH /api/dispatches/:dispatchId/status
+// Body: { status: "EN_ROUTE" | "ON_SCENE" | "COMPLETED" | "CANCELLED" }
+const updateDispatchStatus = async (req, res) => {
+    try {
+        const result = await changeDispatchStatus(
+            req.params.dispatchId,
+            req.body.status?.toUpperCase()
+        );
+
         res.json({
             message: "Dispatch status updated",
-            incident_status: incidentStatus,
-            dispatch: updated.rows[0]
+            ...result
         });
 
     } catch (error) {
-        await client.query("ROLLBACK");
+        if (error instanceof DispatchError) {
+            return res.status(error.statusCode).json({
+                message: error.message
+            });
+        }
 
         console.error("Error updating dispatch status:", error);
 
@@ -559,9 +782,6 @@ const updateDispatchStatus = async (req, res) => {
             message: "Failed to update dispatch status",
             error: error.message
         });
-
-    } finally {
-        client.release();
     }
 };
 
@@ -571,5 +791,7 @@ module.exports = {
     getIncidentDispatches,
     getDispatchRecommendations,
     createDispatch,
-    updateDispatchStatus
+    updateDispatchStatus,
+    changeDispatchStatus,
+    DispatchError
 };
