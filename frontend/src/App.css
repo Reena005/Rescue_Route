@@ -162,7 +162,7 @@ textarea {
     display: grid;
 
     grid-template-columns:
-        repeat(3, 1fr);
+        repeat(2, 1fr);
 
     gap: 8px;
 
@@ -776,6 +776,199 @@ textarea {
 
 
 /* =========================
+   DISPATCH (MODULE 2)
+========================= */
+
+.stat-card strong small {
+    font-size: 12px;
+    color: #74808a;
+    font-weight: 600;
+}
+
+
+.trucks-ready {
+    color: #19733e !important;
+    font-weight: 700;
+}
+
+
+.trucks-none {
+    color: #b42318 !important;
+    font-weight: 700;
+}
+
+
+.dispatch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+
+.dispatch-header .section-title {
+    margin-bottom: 0;
+}
+
+
+.dispatch-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+
+
+.dispatch-subtitle {
+    font-size: 10px;
+    font-weight: 800;
+    color: #6c7780;
+    letter-spacing: 0.6px;
+    margin-bottom: 8px;
+}
+
+
+.dispatch-item,
+.truck-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+
+    border: 1px solid #e1e5e8;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 6px;
+    background: white;
+}
+
+
+.dispatch-item-main {
+    min-width: 0;
+}
+
+
+.dispatch-item-main strong {
+    display: block;
+    font-size: 11px;
+}
+
+
+.dispatch-item-main span {
+    display: block;
+    font-size: 9px;
+    color: #7a858e;
+    margin-top: 3px;
+}
+
+
+.dispatch-item-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+}
+
+
+.dispatch-actions {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+
+.action-button {
+    border: 0;
+    border-radius: 4px;
+    padding: 5px 9px;
+
+    background: #c92a20;
+    color: white;
+
+    font-size: 9px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+
+.action-button:hover {
+    background: #ad2119;
+}
+
+
+.action-button.secondary {
+    background: #eef1f3;
+    color: #46515a;
+}
+
+
+.action-button.secondary:hover {
+    background: #e0e5e8;
+}
+
+
+.action-button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+
+.auto-dispatch {
+    margin-bottom: 10px;
+}
+
+
+.dispatch-history {
+    margin-top: 8px;
+    padding: 8px;
+    background: #f7f9fa;
+    border-radius: 6px;
+    font-size: 9px;
+    color: #6c7780;
+    line-height: 1.6;
+}
+
+
+.status-pill {
+    padding: 3px 7px;
+    border-radius: 10px;
+    font-size: 8px;
+    font-weight: 800;
+    white-space: nowrap;
+    background: #eef1f3;
+    color: #46515a;
+}
+
+
+.status-pill.pending {
+    background: #fff8cc;
+    color: #806500;
+}
+
+
+.status-pill.dispatched,
+.status-pill.en_route {
+    background: #edf3ff;
+    color: #275db7;
+}
+
+
+.status-pill.active,
+.status-pill.on_scene {
+    background: #ffe2e0;
+    color: #b42318;
+}
+
+
+.status-pill.resolved,
+.status-pill.completed {
+    background: #e6f6eb;
+    color: #19733e;
+}
+
+
+/* =========================
    GENERAL
 ========================= */
 
@@ -815,6 +1008,11 @@ textarea {
     }
 
     .station-results {
+        grid-template-columns: 1fr;
+    }
+
+
+    .dispatch-columns {
         grid-template-columns: 1fr;
     }
 

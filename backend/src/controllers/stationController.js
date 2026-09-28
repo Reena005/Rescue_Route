@@ -20,7 +20,21 @@ const getAllStations = async (req, res) => {
                 latitude,
                 longitude,
                 spatial_source,
-                created_at
+                created_at,
+
+                -- Module 2: truck availability at this station
+                (
+                    SELECT COUNT(*)::int
+                    FROM fire_trucks ft
+                    WHERE ft.station_id = fire_stations.station_id
+                      AND ft.status = 'AVAILABLE'
+                ) AS available_trucks,
+
+                (
+                    SELECT COUNT(*)::int
+                    FROM fire_trucks ft
+                    WHERE ft.station_id = fire_stations.station_id
+                ) AS total_trucks
             FROM fire_stations
             ORDER BY station_id;
         `);
@@ -126,6 +140,20 @@ const getNearbyStations = async (req, res) => {
 
                 fs.latitude,
                 fs.longitude,
+
+                -- Module 2: truck availability at this station
+                (
+                    SELECT COUNT(*)::int
+                    FROM fire_trucks ft
+                    WHERE ft.station_id = fs.station_id
+                      AND ft.status = 'AVAILABLE'
+                ) AS available_trucks,
+
+                (
+                    SELECT COUNT(*)::int
+                    FROM fire_trucks ft
+                    WHERE ft.station_id = fs.station_id
+                ) AS total_trucks,
 
                 ROUND(
                     (

@@ -6,6 +6,8 @@ const pool = require("./config/db");
 
 const incidentRoutes = require("./routes/incidentRoutes");
 const stationRoutes = require("./routes/stationRoutes");
+const truckRoutes = require("./routes/truckRoutes");
+const dispatchRoutes = require("./routes/dispatchRoutes");
 
 const app = express();
 
@@ -52,6 +54,14 @@ app.use("/api/incidents", incidentRoutes);
 
 // Station APIs
 app.use("/api/stations", stationRoutes);
+
+
+// Fire truck APIs (Module 2)
+app.use("/api/trucks", truckRoutes);
+
+
+// Dispatch APIs (Module 2)
+app.use("/api/dispatches", dispatchRoutes);
 
 
 const PORT = process.env.PORT || 4000;
