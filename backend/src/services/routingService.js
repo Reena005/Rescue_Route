@@ -16,6 +16,18 @@ const OSRM_URL =
 
 const REQUEST_TIMEOUT_MS = 6000;
 
+// The public OSRM demo server allows about 1 request per second;
+// faster requests get throttled. Self-hosted servers need no gap.
+const MIN_REQUEST_INTERVAL_MS = Number(
+    process.env.OSRM_MIN_INTERVAL_MS ??
+    (OSRM_URL.includes("router.project-osrm.org") ? 1000 : 0)
+);
+
+// Identical routes (e.g. several trucks from one station to the
+// same incident) are reused for a while instead of re-requested
+const ROUTE_CACHE_TTL_MS = 10 * 60 * 1000;
+const ROUTE_CACHE_MAX_ENTRIES = 500;
+
 // Fallback estimate assumptions
 const DETOUR_FACTOR = 1.4;
 const FALLBACK_SPEED_KMH = 25;
@@ -57,25 +69,95 @@ const estimateTravel = (from, to) => {
 };
 
 
-const fetchOsrm = async (path) => {
-    const response = await fetch(`${OSRM_URL}${path}`, {
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+const sleep = (ms) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+
+// Requests run one at a time, spaced by MIN_REQUEST_INTERVAL_MS
+let requestQueue = Promise.resolve();
+let lastRequestAt = 0;
+
+const throttled = (task) => {
+    const run = requestQueue.then(async () => {
+        const wait = lastRequestAt + MIN_REQUEST_INTERVAL_MS - Date.now();
+
+        if (wait > 0) {
+            await sleep(wait);
+        }
+
+        lastRequestAt = Date.now();
+
+        return task();
     });
 
-    const data = await response.json();
+    requestQueue = run.catch(() => {});
+
+    return run;
+};
+
+
+const requestOsrm = async (path) => {
+    let response;
+
+    try {
+        response = await fetch(`${OSRM_URL}${path}`, {
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+        });
+    } catch (error) {
+        // Network failure or timeout
+        error.retryable = true;
+        throw error;
+    }
+
+    const data = await response.json().catch(() => ({}));
 
     if (!response.ok || data.code !== "Ok") {
-        throw new Error(data.message || `OSRM error ${response.status}`);
+        const error = new Error(data.message || `OSRM error ${response.status}`);
+
+        error.retryable =
+            response.status === 429 || response.status >= 500;
+
+        throw error;
     }
 
     return data;
 };
 
 
+// One retry for network errors, timeouts and rate limiting
+const fetchOsrm = async (path) => {
+    try {
+        return await throttled(() => requestOsrm(path));
+
+    } catch (error) {
+        if (!error.retryable) {
+            throw error;
+        }
+
+        return throttled(() => requestOsrm(path));
+    }
+};
+
+
+const routeCache = new Map();
+
+const routeCacheKey = (from, to) =>
+    [from.latitude, from.longitude, to.latitude, to.longitude]
+        .map((value) => Number(value).toFixed(5))
+        .join(",");
+
+
 // Road route between two points.
 // Returns { distance_km, duration_min, source, coordinates }
 // where coordinates are GeoJSON-style [lng, lat] pairs.
 const getRoute = async (from, to) => {
+    const key = routeCacheKey(from, to);
+    const cached = routeCache.get(key);
+
+    if (cached && cached.expires > Date.now()) {
+        return cached.route;
+    }
+
     try {
         const data = await fetchOsrm(
             `/route/v1/driving/${toOsrmCoordinate(from)};${toOsrmCoordinate(to)}` +
@@ -84,12 +166,24 @@ const getRoute = async (from, to) => {
 
         const route = data.routes[0];
 
-        return {
+        const result = {
             distance_km: round(route.distance / 1000, 2),
             duration_min: round(route.duration / 60, 1),
             source: "OSRM",
             coordinates: route.geometry.coordinates
         };
+
+        // Only real road routes are cached; estimates are retried
+        if (routeCache.size >= ROUTE_CACHE_MAX_ENTRIES) {
+            routeCache.delete(routeCache.keys().next().value);
+        }
+
+        routeCache.set(key, {
+            route: result,
+            expires: Date.now() + ROUTE_CACHE_TTL_MS
+        });
+
+        return result;
 
     } catch (error) {
         console.warn("OSRM route failed, using estimate:", error.message);
