@@ -135,3 +135,37 @@ export const updateDispatchStatus = (dispatchId, status) =>
         { status },
         "Failed to update dispatch"
     );
+
+// ============================================================
+// Module 3 — Intelligent Routing & ETA
+// ============================================================
+
+export const getIncidentRoutes = async (incidentId) => {
+    const response = await fetch(
+        `${API_BASE_URL}/incidents/${incidentId}/routes`
+    );
+
+    if (!response.ok) {
+        throw new Error("Failed to fetch routes");
+    }
+
+    return response.json();
+};
+
+
+export const previewRoute = async (incidentId, truckId) => {
+    const params = new URLSearchParams({
+        incident_id: incidentId,
+        truck_id: truckId
+    });
+
+    const response = await fetch(
+        `${API_BASE_URL}/routes/preview?${params}`
+    );
+
+    if (!response.ok) {
+        throw new Error("Failed to preview route");
+    }
+
+    return response.json();
+};

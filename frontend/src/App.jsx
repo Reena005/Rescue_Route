@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import MapView from "./components/MapView";
 import IncidentForm from "./components/IncidentForm";
@@ -9,7 +9,9 @@ import {
     getIncidents,
     getStations,
     getNearbyStations,
-    getTrucks
+    getTrucks,
+    getIncidentRoutes,
+    previewRoute
 } from "./services/api";
 
 import "./App.css";
@@ -31,6 +33,18 @@ function App() {
 
     const [nearbyStations, setNearbyStations] =
         useState([]);
+
+    // Module 3: routes of assigned trucks + one previewed route
+    const [routes, setRoutes] =
+        useState([]);
+
+    const [routePreview, setRoutePreview] =
+        useState(null);
+
+    // Guards against a slow response for a previously
+    // selected incident overwriting the current one
+    const selectedIncidentIdRef =
+        useRef(null);
 
     const [selectedLocation, setSelectedLocation] =
         useState(null);
@@ -95,14 +109,47 @@ function App() {
     }, []);
 
 
+    const loadRoutes =
+        async (incidentId) => {
+
+            try {
+
+                const data =
+                    await getIncidentRoutes(
+                        incidentId
+                    );
+
+                if (
+                    selectedIncidentIdRef.current ===
+                    incidentId
+                ) {
+                    setRoutes(data.routes);
+                }
+
+            } catch (err) {
+
+                console.error(err);
+            }
+        };
+
+
     const handleIncidentSelect =
         async (incident) => {
+
+            selectedIncidentIdRef.current =
+                incident.incident_id;
 
             setSelectedIncident(incident);
 
             setNearbyStations([]);
 
+            setRoutes([]);
+
+            setRoutePreview(null);
+
             setLoadingNearby(true);
+
+            loadRoutes(incident.incident_id);
 
 
             try {
@@ -161,6 +208,10 @@ function App() {
                 setSelectedIncident(updated);
             }
 
+            setRoutePreview(null);
+
+            loadRoutes(selectedIncident.incident_id);
+
             try {
 
                 const data =
@@ -171,6 +222,38 @@ function App() {
                 setNearbyStations(
                     data.nearbyStations
                 );
+
+            } catch (err) {
+
+                console.error(err);
+            }
+        };
+
+
+    // Module 3: show / hide the road route a truck would take
+    const handlePreviewRoute =
+        async (truck) => {
+
+            if (
+                routePreview?.truck_id ===
+                truck.truck_id
+            ) {
+                setRoutePreview(null);
+                return;
+            }
+
+            try {
+
+                const data =
+                    await previewRoute(
+                        selectedIncident.incident_id,
+                        truck.truck_id
+                    );
+
+                setRoutePreview({
+                    ...data,
+                    truck_id: truck.truck_id
+                });
 
             } catch (err) {
 
@@ -474,6 +557,10 @@ function App() {
                         selectedIncident={
                             selectedIncident
                         }
+                        routes={routes}
+                        routePreview={
+                            routePreview
+                        }
                         selectedLocation={
                             selectedLocation
                         }
@@ -505,6 +592,12 @@ function App() {
                         }
                         onDispatchChanged={
                             handleDispatchChanged
+                        }
+                        routePreview={
+                            routePreview
+                        }
+                        onPreviewRoute={
+                            handlePreviewRoute
                         }
                     />
 

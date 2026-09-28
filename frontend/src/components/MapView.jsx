@@ -4,8 +4,12 @@ import {
     Marker,
     Popup,
     CircleMarker,
+    Polyline,
+    useMap,
     useMapEvents
 } from "react-leaflet";
+
+import { useEffect } from "react";
 
 import L from "leaflet";
 
@@ -46,6 +50,39 @@ function LocationSelector({ onLocationSelect }) {
 }
 
 
+// Module 3: route line colour by dispatch status
+const ROUTE_COLORS = {
+    DISPATCHED: "#276ef1",
+    EN_ROUTE: "#276ef1",
+    ON_SCENE: "#19733e"
+};
+
+
+// Zoom the map to fit the routes whenever they change
+function FitToRoutes({ paths }) {
+    const map = useMap();
+
+    const key = paths
+        .map((path) => path.length)
+        .join(",");
+
+    useEffect(() => {
+        const points = paths.flat();
+
+        if (points.length > 1) {
+            map.fitBounds(points, {
+                padding: [40, 40],
+                maxZoom: 15
+            });
+        }
+        // Refit only when the set of routes changes
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [key, map]);
+
+    return null;
+}
+
+
 function getSeverityClass(severity) {
     switch (severity) {
         case "CRITICAL":
@@ -70,10 +107,19 @@ export default function MapView({
     incidents,
     stations,
     selectedIncident,
+    routes = [],
+    routePreview,
     selectedLocation,
     onLocationSelect,
     onIncidentSelect
 }) {
+
+    const routePaths = [
+        ...routes.map((route) => route.path),
+        ...(routePreview ? [routePreview.path] : [])
+    ].filter((path) => path.length > 1);
+
+
     return (
         <div className="map-wrapper">
 
@@ -225,6 +271,78 @@ export default function MapView({
                 })}
 
 
+                {/* Module 3: routes of assigned trucks */}
+                {routes
+                    .filter((route) => route.path.length > 1)
+                    .map((route) => (
+                        <Polyline
+                            key={route.dispatch_id}
+                            positions={route.path}
+                            pathOptions={{
+                                color:
+                                    ROUTE_COLORS[route.status] ||
+                                    "#276ef1",
+                                weight: 5,
+                                opacity: 0.8,
+                                dashArray:
+                                    route.route_source === "ESTIMATE"
+                                        ? "4 8"
+                                        : null
+                            }}
+                        >
+                            <Popup>
+
+                                <div className="popup">
+
+                                    <h3>
+                                        {route.truck_id}
+                                    </h3>
+
+                                    <p>
+                                        {route.truck_type} from{" "}
+                                        {route.fire_station_name}
+                                    </p>
+
+                                    <p>
+                                        <strong>
+                                            Road distance:
+                                        </strong>{" "}
+                                        {route.road_distance_km} km
+                                    </p>
+
+                                    <p>
+                                        <strong>
+                                            ETA:
+                                        </strong>{" "}
+                                        {route.eta_minutes} min
+                                        {route.route_source === "ESTIMATE" &&
+                                            " (estimate)"}
+                                    </p>
+
+                                </div>
+
+                            </Popup>
+                        </Polyline>
+                    ))}
+
+
+                {/* Module 3: previewed route for a recommended truck */}
+                {routePreview && routePreview.path.length > 1 && (
+                    <Polyline
+                        positions={routePreview.path}
+                        pathOptions={{
+                            color: "#f79009",
+                            weight: 5,
+                            opacity: 0.9,
+                            dashArray: "10 8"
+                        }}
+                    />
+                )}
+
+
+                <FitToRoutes paths={routePaths} />
+
+
                 {/* New incident location */}
                 {selectedLocation && (
                     <Marker
@@ -264,6 +382,16 @@ export default function MapView({
                 <div>
                     <span className="legend-dot selected-dot"></span>
                     Selected Location
+                </div>
+
+                <div>
+                    <span className="legend-line route-line"></span>
+                    Truck Route
+                </div>
+
+                <div>
+                    <span className="legend-line preview-line"></span>
+                    Route Preview
                 </div>
 
             </div>

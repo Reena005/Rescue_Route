@@ -8,6 +8,7 @@ const incidentRoutes = require("./routes/incidentRoutes");
 const stationRoutes = require("./routes/stationRoutes");
 const truckRoutes = require("./routes/truckRoutes");
 const dispatchRoutes = require("./routes/dispatchRoutes");
+const routeRoutes = require("./routes/routeRoutes");
 
 const app = express();
 
@@ -62,6 +63,10 @@ app.use("/api/trucks", truckRoutes);
 
 // Dispatch APIs (Module 2)
 app.use("/api/dispatches", dispatchRoutes);
+
+
+// Routing & ETA APIs (Module 3)
+app.use("/api/routes", routeRoutes);
 
 
 const PORT = process.env.PORT || 4000;

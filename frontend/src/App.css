@@ -969,6 +969,42 @@ textarea {
 
 
 /* =========================
+   ROUTING (MODULE 3)
+========================= */
+
+.eta-line {
+    color: #275db7 !important;
+    font-weight: 700;
+}
+
+
+.action-button.secondary.active {
+    background: #fff0d8;
+    color: #a15c00;
+}
+
+
+.legend-line {
+    width: 16px;
+    height: 0;
+    display: inline-block;
+    border-top-width: 3px;
+}
+
+
+.route-line {
+    border-top-style: solid;
+    border-top-color: #276ef1;
+}
+
+
+.preview-line {
+    border-top-style: dashed;
+    border-top-color: #f79009;
+}
+
+
+/* =========================
    GENERAL
 ========================= */
 
