@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
     getIncidentDispatches,
@@ -51,7 +51,9 @@ export default function DispatchPanel({
     incident,
     onDispatchChanged,
     routePreview,
-    onPreviewRoute
+    onPreviewRoute,
+    liveTrucks,
+    refreshKey
 }) {
 
     const [dispatches, setDispatches] =
@@ -92,6 +94,8 @@ export default function DispatchPanel({
 
     const incidentId = incident?.incident_id;
 
+    const loadedIncidentRef = useRef(null);
+
 
     useEffect(() => {
 
@@ -101,10 +105,16 @@ export default function DispatchPanel({
 
         let ignore = false;
 
-        setLoading(true);
-        setError("");
-        setDispatches([]);
-        setRecommendation(null);
+        // Live refreshes (Module 4) reload quietly; only a newly
+        // selected incident shows the loading state
+        if (loadedIncidentRef.current !== incidentId) {
+            loadedIncidentRef.current = incidentId;
+
+            setLoading(true);
+            setError("");
+            setDispatches([]);
+            setRecommendation(null);
+        }
 
         loadDispatchData(incidentId)
             .then((data) => {
@@ -128,7 +138,7 @@ export default function DispatchPanel({
             ignore = true;
         };
 
-    }, [incidentId, loadDispatchData]);
+    }, [incidentId, loadDispatchData, refreshKey]);
 
 
     // Run a dispatch action, then refresh this panel and the dashboard
@@ -281,6 +291,31 @@ export default function DispatchPanel({
                                                       ? ` · arrives ${formatTime(d.expected_arrival_at)}`
                                                       : "")}
                                         </span>
+
+                                        {/* Module 4: live position while driving */}
+                                        {(() => {
+                                            const live =
+                                                liveTrucks?.get(d.truck_id);
+
+                                            if (
+                                                d.status !== "EN_ROUTE" ||
+                                                !live ||
+                                                live.dispatch_id !== d.dispatch_id ||
+                                                live.remaining_km === null
+                                            ) {
+                                                return null;
+                                            }
+
+                                            return (
+                                                <span className="live-line">
+                                                    ● LIVE · {live.remaining_km} km left
+                                                    {live.remaining_eta_min !== null &&
+                                                        ` · ~${live.remaining_eta_min} min`}
+                                                    {live.speed_kmh > 0 &&
+                                                        ` · ${live.speed_kmh} km/h`}
+                                                </span>
+                                            );
+                                        })()}
 
                                     </div>
 

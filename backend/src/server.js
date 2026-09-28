@@ -9,6 +9,11 @@ const stationRoutes = require("./routes/stationRoutes");
 const truckRoutes = require("./routes/truckRoutes");
 const dispatchRoutes = require("./routes/dispatchRoutes");
 const routeRoutes = require("./routes/routeRoutes");
+const trackingRoutes = require("./routes/trackingRoutes");
+
+const trackingStore = require("./services/trackingStore");
+const trackingService = require("./services/trackingService");
+const truckSimulator = require("./services/truckSimulator");
 
 const app = express();
 
@@ -69,10 +74,42 @@ app.use("/api/dispatches", dispatchRoutes);
 app.use("/api/routes", routeRoutes);
 
 
+// Real-time tracking APIs (Module 4)
+app.use("/api/tracking", trackingRoutes);
+
+
+// Module 4: connect the tracking store (Redis or in-memory),
+// give every truck a starting position, and resume any
+// simulated trips interrupted by a restart
+const startTracking = async () => {
+    await trackingStore.init();
+
+    try {
+        const seeded =
+            await trackingService.seedStationPositions();
+
+        const resumed =
+            await truckSimulator.resumeActiveTrips();
+
+        console.log(
+            `Tracking ready: ${seeded} trucks placed at stations, ${resumed} trips resumed`
+        );
+
+    } catch (error) {
+        console.error(
+            "Tracking startup skipped (database not ready):",
+            error.message
+        );
+    }
+};
+
+
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
     console.log(
         `RescueRoute backend running on http://localhost:${PORT}`
     );
+
+    startTracking();
 });

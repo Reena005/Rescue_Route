@@ -4,6 +4,10 @@ const { getTravelTimes } = require("../services/routingService");
 
 const { saveDispatchRoutes } = require("./routeController");
 
+const tracker = require("../services/trackingService");
+
+const simulator = require("../services/truckSimulator");
+
 
 // How many trucks to send by default for each severity
 const TRUCKS_BY_SEVERITY = {
@@ -546,6 +550,13 @@ const createDispatch = async (req, res) => {
             ORDER BY dr.eta_minutes NULLS LAST, d.dispatch_id;
         `, [dispatchIds]);
 
+        // Module 4: trucks are now committed at their station
+        await Promise.all(
+            created.rows.map((d) =>
+                afterStatusChange(d, "DISPATCHED", incidentStatus, "api")
+            )
+        );
+
         const requested = truck_ids
             ? truck_ids.length
             : count || getRecommendedCount(incident.severity);
@@ -583,20 +594,75 @@ const createDispatch = async (req, res) => {
 };
 
 
-// PATCH /api/dispatches/:dispatchId/status
-// Body: { status: "EN_ROUTE" | "ON_SCENE" | "COMPLETED" | "CANCELLED" }
-const updateDispatchStatus = async (req, res) => {
-    const { dispatchId } = req.params;
-    const status = req.body.status?.toUpperCase();
+class DispatchError extends Error {
+    constructor(statusCode, message) {
+        super(message);
+        this.statusCode = statusCode;
+    }
+}
 
-    if (!STATUS_TIMESTAMP[status]) {
-        return res.status(400).json({
-            message:
-                "Status must be EN_ROUTE, ON_SCENE, COMPLETED or CANCELLED"
+
+// Module 4: keep live tracking in step with a dispatch change.
+// Tracking problems are logged, never thrown, so they can never
+// undo or fail a dispatch update.
+const afterStatusChange = async (dispatch, status, incidentStatus, source) => {
+    try {
+        if (status === "DISPATCHED") {
+            await tracker.placeAtStation(dispatch.truck_id, "DISPATCHED");
+
+        } else if (status === "EN_ROUTE") {
+            await simulator.startTrip(dispatch.dispatch_id);
+
+        } else if (status === "ON_SCENE") {
+            simulator.stopTrip(dispatch.dispatch_id);
+
+            await tracker.placeAtIncident(
+                dispatch.truck_id,
+                dispatch.dispatch_id,
+                dispatch.incident_id
+            );
+
+        } else {
+            // COMPLETED / CANCELLED: truck returns to its station
+            simulator.stopTrip(dispatch.dispatch_id);
+
+            await tracker.placeAtStation(dispatch.truck_id, "AVAILABLE");
+        }
+
+        await tracker.publishDispatchChange({
+            dispatch_id: dispatch.dispatch_id,
+            incident_id: dispatch.incident_id,
+            truck_id: dispatch.truck_id,
+            status,
+            incident_status: incidentStatus,
+            source
         });
+
+    } catch (error) {
+        console.error(
+            `Tracking update failed for dispatch ${dispatch.dispatch_id}:`,
+            error
+        );
+    }
+};
+
+
+// Move a dispatch to a new status and keep the truck, incident
+// and live tracking in step. Used by the API and by Module 4
+// when a truck arrives on its own (source = "tracking").
+// Throws DispatchError for invalid requests.
+const changeDispatchStatus = async (dispatchId, status, source = "api") => {
+    if (!STATUS_TIMESTAMP[status]) {
+        throw new DispatchError(
+            400,
+            "Status must be EN_ROUTE, ON_SCENE, COMPLETED or CANCELLED"
+        );
     }
 
     const client = await pool.connect();
+
+    let dispatch;
+    let incidentStatus;
 
     try {
         await client.query("BEGIN");
@@ -609,22 +675,16 @@ const updateDispatchStatus = async (req, res) => {
         `, [dispatchId]);
 
         if (current.rows.length === 0) {
-            await client.query("ROLLBACK");
-
-            return res.status(404).json({
-                message: "Dispatch not found"
-            });
+            throw new DispatchError(404, "Dispatch not found");
         }
 
-        const dispatch = current.rows[0];
+        dispatch = current.rows[0];
 
         if (!NEXT_STATUSES[dispatch.status].includes(status)) {
-            await client.query("ROLLBACK");
-
-            return res.status(409).json({
-                message:
-                    `Cannot change dispatch from ${dispatch.status} to ${status}`
-            });
+            throw new DispatchError(
+                409,
+                `Cannot change dispatch from ${dispatch.status} to ${status}`
+            );
         }
 
 
@@ -652,25 +712,69 @@ const updateDispatchStatus = async (req, res) => {
         `, [dispatch.truck_id, truckStatus]);
 
 
-        const incidentStatus =
+        incidentStatus =
             await syncIncidentStatus(client, dispatch.incident_id);
-
-        const updated = await client.query(`
-            SELECT ${DISPATCH_COLUMNS}
-            ${DISPATCH_FROM}
-            WHERE d.dispatch_id = $1;
-        `, [dispatchId]);
 
         await client.query("COMMIT");
 
+    } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+
+    } finally {
+        client.release();
+    }
+
+
+    await afterStatusChange(dispatch, status, incidentStatus, source);
+
+    const updated = await pool.query(`
+        SELECT ${DISPATCH_COLUMNS}
+        ${DISPATCH_FROM}
+        WHERE d.dispatch_id = $1;
+    `, [dispatchId]);
+
+    return {
+        incident_status: incidentStatus,
+        dispatch: updated.rows[0]
+    };
+};
+
+
+// Module 4: a simulated truck reached its incident
+simulator.onArrival(async (dispatchId) => {
+    try {
+        await changeDispatchStatus(dispatchId, "ON_SCENE", "tracking");
+
+    } catch (error) {
+        // Already moved on (e.g. cancelled) - nothing to do
+        if (!(error instanceof DispatchError)) {
+            console.error(`Arrival update failed for dispatch ${dispatchId}:`, error);
+        }
+    }
+});
+
+
+// PATCH /api/dispatches/:dispatchId/status
+// Body: { status: "EN_ROUTE" | "ON_SCENE" | "COMPLETED" | "CANCELLED" }
+const updateDispatchStatus = async (req, res) => {
+    try {
+        const result = await changeDispatchStatus(
+            req.params.dispatchId,
+            req.body.status?.toUpperCase()
+        );
+
         res.json({
             message: "Dispatch status updated",
-            incident_status: incidentStatus,
-            dispatch: updated.rows[0]
+            ...result
         });
 
     } catch (error) {
-        await client.query("ROLLBACK");
+        if (error instanceof DispatchError) {
+            return res.status(error.statusCode).json({
+                message: error.message
+            });
+        }
 
         console.error("Error updating dispatch status:", error);
 
@@ -678,9 +782,6 @@ const updateDispatchStatus = async (req, res) => {
             message: "Failed to update dispatch status",
             error: error.message
         });
-
-    } finally {
-        client.release();
     }
 };
 
@@ -690,5 +791,7 @@ module.exports = {
     getIncidentDispatches,
     getDispatchRecommendations,
     createDispatch,
-    updateDispatchStatus
+    updateDispatchStatus,
+    changeDispatchStatus,
+    DispatchError
 };

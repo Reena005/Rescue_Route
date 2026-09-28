@@ -5,6 +5,8 @@ import IncidentForm from "./components/IncidentForm";
 import NearbyStations from "./components/NearbyStations";
 import DispatchPanel from "./components/DispatchPanel";
 
+import useTruckTracking from "./hooks/useTruckTracking";
+
 import {
     getIncidents,
     getStations,
@@ -40,6 +42,20 @@ function App() {
 
     const [routePreview, setRoutePreview] =
         useState(null);
+
+    // Module 4: live truck positions and server-pushed
+    // dispatch changes (e.g. a truck arriving on scene)
+    const {
+        liveTrucks,
+        connected: trackingConnected,
+        dispatchEvent
+    } = useTruckTracking();
+
+    const [dispatchRefreshKey, setDispatchRefreshKey] =
+        useState(0);
+
+    const handleDispatchChangedRef =
+        useRef(null);
 
     // Guards against a slow response for a previously
     // selected incident overwriting the current one
@@ -230,6 +246,42 @@ function App() {
         };
 
 
+    useEffect(() => {
+        handleDispatchChangedRef.current =
+            handleDispatchChanged;
+    });
+
+
+    // Module 4: refresh when the server reports a dispatch
+    // change. Debounced, because one auto-dispatch sends an
+    // event per truck.
+    useEffect(() => {
+
+        if (!dispatchEvent) {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            handleDispatchChangedRef.current?.();
+
+            setDispatchRefreshKey(
+                (key) => key + 1
+            );
+        }, 300);
+
+        return () => clearTimeout(timer);
+
+    }, [dispatchEvent]);
+
+
+    const deployedTruckCount =
+        [...liveTrucks.values()].filter(
+            (truck) =>
+                ["DISPATCHED", "EN_ROUTE", "ON_SCENE"]
+                    .includes(truck.status)
+        ).length;
+
+
     // Module 3: show / hide the road route a truck would take
     const handlePreviewRoute =
         async (truck) => {
@@ -318,6 +370,18 @@ function App() {
                     <span className="status-dot"></span>
 
                     SYSTEM ONLINE
+
+                    <span
+                        className={`tracking-status ${
+                            trackingConnected
+                                ? "live"
+                                : "offline"
+                        }`}
+                    >
+                        {trackingConnected
+                            ? "● LIVE TRACKING"
+                            : "○ TRACKING OFFLINE"}
+                    </span>
 
                 </div>
 
@@ -546,6 +610,11 @@ function App() {
                                 {" "}stations
                             </span>
 
+                            <span>
+                                ● {deployedTruckCount}
+                                {" "}trucks deployed
+                            </span>
+
                         </div>
 
                     </div>
@@ -560,6 +629,9 @@ function App() {
                         routes={routes}
                         routePreview={
                             routePreview
+                        }
+                        liveTrucks={
+                            liveTrucks
                         }
                         selectedLocation={
                             selectedLocation
@@ -598,6 +670,12 @@ function App() {
                         }
                         onPreviewRoute={
                             handlePreviewRoute
+                        }
+                        liveTrucks={
+                            liveTrucks
+                        }
+                        refreshKey={
+                            dispatchRefreshKey
                         }
                     />
 
