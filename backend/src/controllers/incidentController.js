@@ -1,8 +1,15 @@
 const pool = require("../config/db");
 
+// Source of the Module 5 synthetic history seed
+const HISTORY_SOURCE = "RescueRoute Synthetic History";
+
+
 // GET /api/incidents
+// GET /api/incidents?include_history=false  (hide Module 5 history)
 const getAllIncidents = async (req, res) => {
     try {
+        const includeHistory = req.query.include_history !== "false";
+
         const result = await pool.query(`
             SELECT
                 incident_id,
@@ -16,8 +23,9 @@ const getAllIncidents = async (req, res) => {
                 status,
                 created_at
             FROM incidents
+            WHERE $1 OR source_dataset <> $2
             ORDER BY reported_at DESC;
-        `);
+        `, [includeHistory, HISTORY_SOURCE]);
 
         res.json({
             count: result.rows.length,
@@ -162,7 +170,9 @@ const createIncident = async (req, res) => {
                     ST_MakePoint($6, $5),
                     4326
                 )::geography,
-                COALESCE($7::timestamp, CURRENT_TIMESTAMP),
+                -- Parse with time zone ("...Z" from the browser),
+                -- then store as local time like CURRENT_TIMESTAMP
+                COALESCE($7::timestamptz::timestamp, CURRENT_TIMESTAMP),
                 'PENDING'
             )
             RETURNING

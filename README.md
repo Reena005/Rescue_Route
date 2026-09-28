@@ -2,7 +2,7 @@
 
 RescueRoute is a database-driven emergency response system designed to support faster and more informed fire-response decisions.
 
-The system manages fire incidents, fire stations and fire trucks, dispatches the fastest available trucks using road routing, and tracks trucks live on a map. It uses PostgreSQL and PostGIS for spatial data, OSRM for road routing, and Redis for real-time tracking.
+The system manages fire incidents, fire stations and fire trucks, dispatches the fastest available trucks using road routing, tracks trucks live on a map, and analyses response history. It uses PostgreSQL and PostGIS for spatial data, OSRM for road routing, Redis for real-time tracking, and HDFS + Hive for historical analytics.
 
 ---
 
@@ -20,6 +20,8 @@ RescueRoute provides a centralized system that:
 * Dispatches trucks and keeps truck and incident statuses in sync
 * Calculates road routes and ETAs and draws them on the map
 * Tracks trucks live and detects arrival automatically
+* Analyses response times, station workload, truck utilization, trends and hotspots
+* Exports history to HDFS as Hive tables
 * Provides REST APIs for all of the above
 
 ### Current Implementation
@@ -30,7 +32,7 @@ RescueRoute provides a centralized system that:
 | 2 | Fire Truck & Dispatch Management | ✅ Completed |
 | 3 | Intelligent Routing & ETA | ✅ Completed |
 | 4 | Real-Time Tracking | ✅ Completed |
-| 5 | Historical Analytics | Planned |
+| 5 | Historical Analytics | ✅ Completed |
 
 ---
 
@@ -61,12 +63,12 @@ RescueRoute provides a centralized system that:
 * PostGIS — spatial points, nearest-station search, route paths
 * OSRM — road routing and travel times (Module 3)
 * Redis — live truck positions, GPS history and live updates (Module 4, optional during development)
+* Hadoop HDFS — historical data storage, written through WebHDFS (Module 5, optional during development)
+* Hive — batch historical analytics over the HDFS files (Module 5)
 
 ## Planned Technologies
 
 * CockroachDB — operational distributed data
-* Hadoop/HDFS — historical data storage
-* Hive — historical analytics
 
 ---
 
@@ -86,7 +88,8 @@ RescueRoute/
 │   │   │   ├── truckController.js         (Module 2)
 │   │   │   ├── dispatchController.js      (Module 2)
 │   │   │   ├── routeController.js         (Module 3)
-│   │   │   └── trackingController.js      (Module 4)
+│   │   │   ├── trackingController.js      (Module 4)
+│   │   │   └── analyticsController.js     (Module 5)
 │   │   │
 │   │   ├── routes/
 │   │   │   ├── incidentRoutes.js
@@ -94,13 +97,16 @@ RescueRoute/
 │   │   │   ├── truckRoutes.js
 │   │   │   ├── dispatchRoutes.js
 │   │   │   ├── routeRoutes.js
-│   │   │   └── trackingRoutes.js
+│   │   │   ├── trackingRoutes.js
+│   │   │   └── analyticsRoutes.js
 │   │   │
 │   │   ├── services/
 │   │   │   ├── routingService.js          (Module 3 — OSRM)
 │   │   │   ├── trackingStore.js           (Module 4 — Redis / in-memory)
 │   │   │   ├── trackingService.js         (Module 4)
-│   │   │   └── truckSimulator.js          (Module 4)
+│   │   │   ├── truckSimulator.js          (Module 4)
+│   │   │   ├── historyExporter.js         (Module 5)
+│   │   │   └── dataLakeStorage.js         (Module 5 — HDFS / local)
 │   │   │
 │   │   └── server.js
 │   │
@@ -115,7 +121,9 @@ RescueRoute/
 │   │   │   ├── MapView.jsx
 │   │   │   ├── IncidentForm.jsx
 │   │   │   ├── NearbyStations.jsx
-│   │   │   └── DispatchPanel.jsx          (Modules 2–4)
+│   │   │   ├── DispatchPanel.jsx          (Modules 2–4)
+│   │   │   ├── AnalyticsView.jsx          (Module 5)
+│   │   │   └── analytics/charts.jsx       (Module 5)
 │   │   │
 │   │   ├── hooks/
 │   │   │   └── useTruckTracking.js        (Module 4)
@@ -132,17 +140,25 @@ RescueRoute/
 │   └── ...
 │
 ├── database/
-│   └── postgis/
-│       ├── schema.sql                     (Module 1)
-│       ├── module2_schema.sql             (Module 2)
-│       ├── module3_schema.sql             (Module 3)
-│       └── seed/
-│           ├── fire_stations.sql
-│           ├── incidents.sql
-│           └── fire_trucks.sql            (Module 2)
+│   ├── postgis/
+│   │   ├── schema.sql                     (Module 1)
+│   │   ├── module2_schema.sql             (Module 2)
+│   │   ├── module3_schema.sql             (Module 3)
+│   │   ├── module5_schema.sql             (Module 5)
+│   │   └── seed/
+│   │       ├── fire_stations.sql
+│   │       ├── incidents.sql
+│   │       ├── fire_trucks.sql            (Module 2)
+│   │       └── history.sql                (Module 5 — synthetic history)
+│   │
+│   └── hive/                              (Module 5)
+│       ├── create_tables.hql
+│       └── analytics_queries.hql
 │
 ├── datasets/
 │   └── module1/
+│
+├── datalake/                              (Module 5 local exports, not committed)
 │
 └── README.md
 ```
@@ -198,6 +214,8 @@ SELECT PostGIS_Version();
 
 The project requires PostGIS because incident, station and route locations are stored as geographic data.
 
+On Windows, PostGIS is **not** included in the PostgreSQL installer. Install it with **Application Stack Builder** (installed with PostgreSQL: Start menu → PostgreSQL → Application Stack Builder → Spatial Extensions → PostGIS), or download the bundle for your PostgreSQL version from https://download.osgeo.org/postgis/windows/. If `CREATE EXTENSION postgis` fails with "extension is not available", PostGIS is missing.
+
 ---
 
 ### 4.4 Git
@@ -224,6 +242,7 @@ Module 4 stores live truck positions in Redis. Redis is **optional during develo
 
 On Windows, use one of:
 
+* Portable Redis for Windows (no installer, no admin rights): `winget install taizod1024.redis-windows-fork`, then open a new terminal and run `redis-server`
 * Memurai (Redis-compatible for Windows): https://www.memurai.com/
 * Redis inside WSL: `sudo apt install redis-server`
 * Docker: `docker run -p 6379:6379 redis`
@@ -242,7 +261,13 @@ PONG
 
 ### 4.6 Internet access for routing
 
-Module 3 uses the public OSRM routing server by default, so the backend needs internet access for road routes. If OSRM cannot be reached, the backend falls back to an estimated route and ETA (see [Troubleshooting](#26-troubleshooting)).
+Module 3 uses the public OSRM routing server by default, so the backend needs internet access for road routes. The public server allows about one request per second, so the backend spaces its requests, retries once, and reuses identical routes. If OSRM cannot be reached, the backend falls back to an estimated route and ETA (see [Troubleshooting](#27-troubleshooting)).
+
+### 4.7 Hadoop HDFS and Hive
+
+Module 5 exports history to HDFS for Hive. HDFS is **optional during development**: without it, exports are written to a local `datalake/` folder in exactly the same layout, which can be uploaded to HDFS later.
+
+To use HDFS, you need a running Hadoop cluster with WebHDFS enabled (the default on the NameNode web port, usually `9870`) and Hive with HiveServer2 for the queries.
 
 ---
 
@@ -332,8 +357,12 @@ The database files must be run **in this order**, because later modules referenc
 | 4 | `database/postgis/module2_schema.sql` | 2 | `fire_trucks`, `dispatches` tables |
 | 5 | `database/postgis/seed/fire_trucks.sql` | 2 | 83 demo fire trucks |
 | 6 | `database/postgis/module3_schema.sql` | 3 | `dispatch_routes` table |
+| 7 | `database/postgis/module5_schema.sql` | 5 | `v_dispatch_facts` view, export log tables |
+| 8 | `database/postgis/seed/history.sql` | 5 | ~360 synthetic historical incidents with dispatches (optional, recommended) |
 
 Module 4 has no database file: live positions are stored in Redis (or in memory).
+
+`history.sql` gives the analytics page two months of data (July–August 2026) to work with. Without it, analytics only covers dispatches made in the app.
 
 ## 8.1 Run the files from the PostgreSQL prompt
 
@@ -346,6 +375,8 @@ From the `rescueroute_spatial` prompt, run each file with `\i`. Replace the path
 \i 'C:/Users/YourName/Rescue_Route/database/postgis/module2_schema.sql'
 \i 'C:/Users/YourName/Rescue_Route/database/postgis/seed/fire_trucks.sql'
 \i 'C:/Users/YourName/Rescue_Route/database/postgis/module3_schema.sql'
+\i 'C:/Users/YourName/Rescue_Route/database/postgis/module5_schema.sql'
+\i 'C:/Users/YourName/Rescue_Route/database/postgis/seed/history.sql'
 ```
 
 ## 8.2 Or run them from PowerShell
@@ -361,13 +392,15 @@ $psql = "C:\Program Files\PostgreSQL\17\bin\psql.exe"
 & $psql -U postgres -h localhost -d rescueroute_spatial -f database/postgis/module2_schema.sql
 & $psql -U postgres -h localhost -d rescueroute_spatial -f database/postgis/seed/fire_trucks.sql
 & $psql -U postgres -h localhost -d rescueroute_spatial -f database/postgis/module3_schema.sql
+& $psql -U postgres -h localhost -d rescueroute_spatial -f database/postgis/module5_schema.sql
+& $psql -U postgres -h localhost -d rescueroute_spatial -f database/postgis/seed/history.sql
 ```
 
-## 8.3 Upgrading an existing Module 1 database
+## 8.3 Upgrading an existing database
 
-If your database already has the Module 1 tables and data, run only files 4–6.
+Run only the files for the modules you do not have yet — for example, a database with Modules 1–4 needs only files 7 and 8.
 
-Note: re-running `module2_schema.sql` or `fire_trucks.sql` deletes existing trucks and dispatches.
+Note: re-running `module2_schema.sql` or `fire_trucks.sql` deletes existing trucks and dispatches. Re-running `history.sql` only replaces the synthetic history (incident IDs `HIS00001`…).
 
 ---
 
@@ -382,13 +415,15 @@ SELECT
     (SELECT COUNT(*) FROM fire_trucks)   AS trucks;
 ```
 
-Expected:
+Expected (with `history.sql` loaded):
 
 ```text
  stations | incidents | trucks
 ----------+-----------+--------
-       33 |        32 |     83
+       33 |       392 |     83
 ```
+
+Without `history.sql`, incidents is 32.
 
 Check PostGIS geometry:
 
@@ -471,6 +506,12 @@ DB_PASSWORD=YOUR_POSTGRES_PASSWORD
 # REDIS_URL=redis://localhost:6379
 # TRUCK_SIMULATION=true
 # SIMULATION_SPEEDUP=10
+
+# Module 5 — historical analytics (optional)
+# HDFS_NAMENODE_URL=http://localhost:9870
+# HDFS_USER=hadoop
+# HDFS_BASE_PATH=/rescueroute/warehouse
+# ANALYTICS_EXPORT_INTERVAL_MIN=60
 ```
 
 Replace:
@@ -487,6 +528,12 @@ with the password of the local PostgreSQL user.
 | `REDIS_URL` | not set | Redis connection. When not set or unreachable, an in-memory store is used. |
 | `TRUCK_SIMULATION` | `true` | Set to `false` to disable the truck movement simulator. |
 | `SIMULATION_SPEEDUP` | `10` | Simulated trips run this many times faster than real time. |
+| `OSRM_MIN_INTERVAL_MS` | `1000` for the public server, else `0` | Minimum gap between routing requests. |
+| `HDFS_NAMENODE_URL` | not set | HDFS NameNode web address (WebHDFS). When not set, exports go to the local `datalake/` folder. |
+| `HDFS_USER` | `hadoop` | HDFS user the files are written as. |
+| `HDFS_BASE_PATH` | `/rescueroute/warehouse` | HDFS folder for exports (must match the Hive table locations). |
+| `ANALYTICS_LOCAL_DIR` | `<project>/datalake/warehouse` | Local export folder when HDFS is not configured. |
+| `ANALYTICS_EXPORT_INTERVAL_MIN` | not set | Export automatically every N minutes. When not set, export from the Analytics page or API. |
 
 Do not commit `.env` to GitHub.
 
@@ -754,6 +801,28 @@ The live stream sends two event types:
 
 ---
 
+## 14.7 Analytics APIs (Module 5)
+
+All GET endpoints accept `?from=YYYY-MM-DD&to=YYYY-MM-DD` (inclusive, by incident report date).
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/analytics/summary` | Totals, median / 90th-percentile response time, ETA accuracy |
+| GET | `/api/analytics/response-times?group_by=severity` | Response times grouped by `severity`, `incident_type`, `station`, `division` or `hour` |
+| GET | `/api/analytics/stations` | Workload per station: dispatches, share, busy hours, average travel |
+| GET | `/api/analytics/trucks` | Utilization per truck: dispatches, busy hours, % of the period, estimated km |
+| GET | `/api/analytics/trends?interval=week` | Incidents per `day`, `week` or `month`, by severity |
+| GET | `/api/analytics/hourly` | Incidents and response time by hour of day |
+| GET | `/api/analytics/hotspots?cell_km=1` | Incidents clustered on a grid (PostGIS) |
+| POST | `/api/analytics/export` | Export history to HDFS / the local data lake. Body: `{ "from": "...", "to": "..." }` (optional) |
+| GET | `/api/analytics/exports` | Recent export runs and the storage in use |
+
+`GET /api/incidents?include_history=false` hides the synthetic history incidents (the Operations view uses this).
+
+Response time is measured from the incident report to the **first** truck on scene.
+
+---
+
 # 15. Start the Frontend
 
 Open another terminal.
@@ -787,6 +856,10 @@ Open that URL in the browser.
 ---
 
 # 16. Frontend Features
+
+### Views
+
+The header switches between **Operations** (Modules 1–4) and **Analytics** (Module 5). The Analytics page can be opened directly at `http://localhost:5173/#analytics`.
 
 ### Dashboard
 
@@ -836,6 +909,17 @@ For the selected incident:
 * **Dispatch** — send one truck, or **Auto Dispatch** the number recommended for the severity
 * **Assigned trucks** — ETA and expected arrival time; while driving, a live line with distance left, remaining time and speed; after arrival, the actual travel time
 * **En Route / On Scene / Complete / Cancel** — move each dispatch along
+
+### Analytics Page
+
+* Date range: all time, last 90 / 30 days, or custom dates
+* Headline numbers: incidents, dispatches, median response, 90th-percentile response, ETA accuracy
+* Charts: incidents per week, incidents by hour of day, median response by severity and by incident type, busiest stations
+* Most used trucks with utilization
+* Hotspot map of incident clusters
+* **Export** button with the history of export runs
+
+Every chart has a hover tooltip, and a hidden table for screen readers.
 
 ### Demo Flow
 
@@ -1023,7 +1107,87 @@ Trucks do not have GPS devices yet, so a simulator drives each truck along its M
 
 ---
 
-# 21. Database Files
+# 21. Module 5
+
+## Historical Analytics
+
+### Responsibilities
+
+* Historical incidents
+* Response-time analysis
+* Station workload
+* Truck utilization
+* GPS history
+* HDFS storage
+* Hive-based analytics
+
+### Two Levels of Analytics
+
+| | Where | Used for |
+|---|---|---|
+| **Live analytics** | PostgreSQL (`v_dispatch_facts` view) | The Analytics page and `/api/analytics/*` — always up to date |
+| **Batch analytics** | HDFS + Hive (`database/hive/`) | Long-term history and large-scale queries over exported files |
+
+Both compute the same measures from the same dispatch facts.
+
+### Dispatch Measures (`v_dispatch_facts`)
+
+| Measure | Meaning |
+|---|---|
+| `dispatch_delay_min` | Incident reported → truck dispatched |
+| `travel_min` | Truck dispatched → truck arrived |
+| `response_min` | Incident reported → truck arrived |
+| `eta_error_min` | Actual travel time − Module 3 ETA |
+| `on_scene_min` | Truck arrived → dispatch completed |
+| `busy_min` | Truck dispatched → dispatch finished |
+
+### Export Layout (HDFS or local)
+
+```text
+/rescueroute/warehouse/
+├── incidents/dt=YYYY-MM-DD/part-00000.json
+├── dispatch_facts/dt=YYYY-MM-DD/part-00000.json
+└── truck_gps/dt=YYYY-MM-DD/part-<run>.json
+```
+
+Files are JSON Lines, partitioned by date (`dt=`), which Hive reads as partitions.
+
+* Incident and dispatch partitions are rewritten from PostgreSQL on every export, so exporting again is safe.
+* GPS points come from Module 4, which keeps only the latest 500 per truck, so each export sends only the points recorded since the previous export. Export regularly (or set `ANALYTICS_EXPORT_INTERVAL_MIN`) to keep the full GPS history.
+* HDFS is written through **WebHDFS**, the HDFS NameNode's built-in REST API — no Hadoop libraries are needed in the backend.
+
+### Using Hive
+
+1. Export from the Analytics page, or:
+
+   ```powershell
+   curl -X POST http://localhost:4000/api/analytics/export
+   ```
+
+2. If you exported locally, upload the folder to HDFS:
+
+   ```bash
+   hdfs dfs -mkdir -p /rescueroute
+   hdfs dfs -put datalake/warehouse /rescueroute/
+   ```
+
+3. Create the Hive tables (once) and register new partitions:
+
+   ```bash
+   beeline -u jdbc:hive2://localhost:10000 -f database/hive/create_tables.hql
+   ```
+
+4. Run the analytics queries:
+
+   ```bash
+   beeline -u jdbc:hive2://localhost:10000 -f database/hive/analytics_queries.hql
+   ```
+
+After each new export, run `MSCK REPAIR TABLE` for the three tables (the last lines of `create_tables.hql`) so Hive sees new dates.
+
+---
+
+# 22. Database Files
 
 ```text
 database/postgis/
@@ -1031,29 +1195,37 @@ database/postgis/
 ├── schema.sql              Module 1 tables and spatial indexes
 ├── module2_schema.sql      Module 2 tables: fire_trucks, dispatches
 ├── module3_schema.sql      Module 3 table: dispatch_routes
+├── module5_schema.sql      Module 5: v_dispatch_facts view, export log
 │
 └── seed/
     ├── fire_stations.sql   33 Chennai fire stations
     ├── incidents.sql       32 demo incidents
-    └── fire_trucks.sql     83 demo fire trucks
+    ├── fire_trucks.sql     83 demo fire trucks
+    └── history.sql         ~360 synthetic historical incidents + dispatches
+
+database/hive/
+├── create_tables.hql       Hive external tables over the HDFS exports
+└── analytics_queries.hql   Response time, workload, utilization, ETA accuracy,
+                            hourly pattern, trends, hotspots, GPS activity
 ```
 
 This separation allows another developer to recreate the complete database after cloning the repository.
 
 ---
 
-# 22. Dataset Information
+# 23. Dataset Information
 
 The project uses fire-station information from the Chennai fire-station dataset.
 
-The incident records and the fire-truck fleet are **demo/synthetic data** used for development and demonstration:
+The incident records, the fire-truck fleet and the dispatch history are **demo/synthetic data** used for development and demonstration:
 
-* Incidents are not real historical emergency reports.
+* Incidents are not real historical emergency reports. Many demo incidents in `incidents.sql` sit exactly at a fire station, so dispatching to them gives a zero-length route and an instant arrival — pick one further away (e.g. `INC1008`) to see trucks drive.
+* `history.sql` generates about 360 incidents (IDs `HIS00001`…, source "RescueRoute Synthetic History") for July–August 2026 with built-in patterns: more fires between 10:00 and 20:00, hotspots at Ambattur Industrial Estate and T. Nagar, slower travel in rush hours, and some extra trucks recalled before arrival.
 * Every station has a Water Tender and a Foam Tender; every third station also has an Aerial Ladder Platform and every fifth a Rescue Tender. Three trucks start in maintenance.
 
 ---
 
-# 23. Running the Complete System
+# 24. Running the Complete System
 
 Two terminals are required (plus Redis, if you use it).
 
@@ -1097,20 +1269,20 @@ The overall architecture is:
                 │                             │
                 └──────────── REST ───────────┘
                                               │
-              ┌───────────────────┬───────────┴───────────┐
-              │                   │                       │
-        PostgreSQL +          OSRM routing           Redis (or
-          PostGIS              (Module 3)           in-memory)
-              │                                     (Module 4)
-   ┌──────────┼──────────┬──────────┐                   │
-   │          │          │          │           Live positions,
-Incidents  Stations   Trucks    Dispatches       GPS history,
-                                + Routes         pub/sub
+              ┌───────────────────┬───────────┴───────────┬──────────────────┐
+              │                   │                       │                  │
+        PostgreSQL +          OSRM routing           Redis (or          HDFS (or local
+          PostGIS              (Module 3)           in-memory)          datalake/)
+              │                                     (Module 4)          (Module 5)
+   ┌──────────┼──────────┬──────────┐                   │                  │
+   │          │          │          │           Live positions,       Exported history
+Incidents  Stations   Trucks    Dispatches       GPS history,               │
+                                + Routes         pub/sub                  Hive
 ```
 
 ---
 
-# 24. Module Integration
+# 25. Module Integration
 
 ```text
 Module 1   Incident reported
@@ -1127,34 +1299,25 @@ Module 4   Truck tracked live along its route
               ↓
            Completed → truck back at station → incident RESOLVED
               ↓
-Module 5   Historical analytics (planned)
+Module 5   Response times, workload, utilization, hotspots (PostgreSQL)
+              ↓
+           History + GPS exported to HDFS → Hive batch analytics
 ```
 
 ---
 
-# 25. Future Modules
+# 26. Future Work
 
-## Module 5 — Historical Analytics
+All five planned modules are complete. Possible next steps:
 
-Planned functionality:
-
-* Historical incidents
-* Response-time analysis (ETA vs actual travel time — already recorded per dispatch)
-* Station workload
-* Truck utilization
-* GPS history (already collected per truck by Module 4)
-* HDFS storage
-* Hive-based analytics
-
-Data already available for Module 5:
-
-* `dispatches` — dispatched, en-route, arrived and completed timestamps
-* `dispatch_routes` — road distance and ETA per dispatch
-* Redis streams `rr:truck:history:<truckId>` — GPS points per truck
+* **CockroachDB** for operational data (trucks and dispatches) across multiple sites, as listed under Planned Technologies
+* A crew mobile app posting real GPS positions to `/api/tracking/trucks/:truckId/location`
+* A self-hosted OSRM server for production routing
+* Scheduled Hive jobs (e.g. nightly) feeding reports
 
 ---
 
-# 26. Troubleshooting
+# 27. Troubleshooting
 
 ## PostgreSQL connection failed
 
@@ -1173,6 +1336,30 @@ If `/api/health` shows `client password must be a string`, the backend did not f
 ## `relation "fire_trucks" does not exist` (or `dispatch_routes`)
 
 The Module 2 or Module 3 database files have not been run. Run the files in [section 8](#8-create-the-database-schema-and-load-seed-data) in order.
+
+---
+
+## `extension "postgis" is not available`
+
+PostGIS is not installed for your PostgreSQL. See [section 4.3](#43-postgis).
+
+---
+
+## Analytics page shows empty charts
+
+Load `database/postgis/seed/history.sql`, or dispatch and complete some incidents in the Operations view first.
+
+---
+
+## `relation "v_dispatch_facts" does not exist`
+
+Run `database/postgis/module5_schema.sql`.
+
+---
+
+## Export fails with `WebHDFS CREATE failed`
+
+Check `HDFS_NAMENODE_URL` (the NameNode web port, usually `9870`), that WebHDFS is enabled, and that `HDFS_USER` may write to `HDFS_BASE_PATH`. Remove `HDFS_NAMENODE_URL` to export locally instead.
 
 ---
 
@@ -1263,7 +1450,7 @@ Also ensure Leaflet CSS is imported in the frontend.
 
 ---
 
-# 27. Important Development Rule
+# 28. Important Development Rule
 
 Database changes for this project are applied directly to the existing PostgreSQL database.
 
@@ -1275,12 +1462,14 @@ Database structure and seed data are maintained through:
 database/postgis/schema.sql
 database/postgis/module2_schema.sql
 database/postgis/module3_schema.sql
+database/postgis/module5_schema.sql
 database/postgis/seed/
+database/hive/
 ```
 
 ---
 
-# 28. Git Collaboration
+# 29. Git Collaboration
 
 The main project branch is:
 
@@ -1295,24 +1484,25 @@ Each module is developed on its own branch and merged into `reena-module1` throu
 | 2 | `module2-dispatch` | #1 (merged) |
 | 3 | `module3-routing` | #2 (merged) |
 | 4 | `module4-tracking` | #3 (merged) |
+| 5 | `module5-analytics` | pull request into `reena-module1` |
 
 To start new work:
 
 ```powershell
 git checkout reena-module1
 git pull
-git checkout -b module5-analytics
+git checkout -b my-new-feature
 ```
 
 Push the branch and open a pull request into `reena-module1`:
 
 ```powershell
-git push -u origin module5-analytics
+git push -u origin my-new-feature
 ```
 
 ---
 
-# 29. Project Status
+# 30. Project Status
 
 ### Module 1 — Incident Management & Spatial Processing ✅
 
@@ -1350,13 +1540,18 @@ git push -u origin module5-analytics
 * GPS history and nearby-truck search
 * Live map and dispatch panel updates over Server-Sent Events
 
-### Module 5 — Historical Analytics
+### Module 5 — Historical Analytics ✅
 
-Planned.
+* Dispatch facts view with response, travel, ETA-error, on-scene and busy times
+* Analytics APIs: summary, response times by group, station workload, truck utilization, trends, hourly pattern, hotspots
+* Analytics page with charts, tables and a hotspot map
+* Export to HDFS (WebHDFS) or a local data lake as Hive-ready date partitions, including GPS history
+* Hive table definitions and batch analytics queries
+* Synthetic two-month history seed
 
 ---
 
-# 30. Quick Start
+# 31. Quick Start
 
 For an already configured machine:
 
@@ -1375,6 +1570,8 @@ database/postgis/seed/incidents.sql
 database/postgis/module2_schema.sql
 database/postgis/seed/fire_trucks.sql
 database/postgis/module3_schema.sql
+database/postgis/module5_schema.sql
+database/postgis/seed/history.sql
 ```
 
 Create `backend/.env` (see [section 11](#11-backend-environment-configuration)).
@@ -1399,6 +1596,7 @@ Open:
 
 ```text
 http://localhost:5173
+http://localhost:5173/#analytics
 ```
 
 Backend API:
@@ -1419,4 +1617,4 @@ http://localhost:4000/api/health
 
 **Intelligent Firefighter Dispatch and Emergency Routing System**
 
-Completed: Module 1 — Incident Management & Spatial Processing · Module 2 — Fire Truck & Dispatch Management · Module 3 — Intelligent Routing & ETA · Module 4 — Real-Time Tracking
+Completed: Module 1 — Incident Management & Spatial Processing · Module 2 — Fire Truck & Dispatch Management · Module 3 — Intelligent Routing & ETA · Module 4 — Real-Time Tracking · Module 5 — Historical Analytics

@@ -1,7 +1,10 @@
 const API_BASE_URL = "http://localhost:4000/api";
 
 export const getIncidents = async () => {
-    const response = await fetch(`${API_BASE_URL}/incidents`);
+    // Operations view: live incidents only (no Module 5 history)
+    const response = await fetch(
+        `${API_BASE_URL}/incidents?include_history=false`
+    );
 
     if (!response.ok) {
         throw new Error("Failed to fetch incidents");
@@ -190,3 +193,36 @@ export const getTrackedTrucks = async () => {
 // Live "location" and "dispatch" events (Server-Sent Events)
 export const openTrackingStream = () =>
     new EventSource(`${API_BASE_URL}/tracking/stream`);
+
+// ============================================================
+// Module 5 — Historical Analytics
+// ============================================================
+
+// endpoint: "summary", "response-times", "stations", "trucks",
+// "trends", "hourly", "hotspots", "exports"
+export const getAnalytics = async (endpoint, params = {}) => {
+    const query = new URLSearchParams(
+        Object.entries(params).filter(([, value]) => value)
+    );
+
+    const response = await fetch(
+        `${API_BASE_URL}/analytics/${endpoint}?${query}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.message || "Failed to load analytics");
+    }
+
+    return data;
+};
+
+
+export const exportHistory = (range) =>
+    sendJson(
+        `${API_BASE_URL}/analytics/export`,
+        "POST",
+        range,
+        "Export failed"
+    );

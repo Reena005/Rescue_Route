@@ -4,6 +4,7 @@ import MapView from "./components/MapView";
 import IncidentForm from "./components/IncidentForm";
 import NearbyStations from "./components/NearbyStations";
 import DispatchPanel from "./components/DispatchPanel";
+import AnalyticsView from "./components/AnalyticsView";
 
 import useTruckTracking from "./hooks/useTruckTracking";
 
@@ -20,6 +21,20 @@ import "./App.css";
 
 
 function App() {
+
+    // "operations" (Modules 1-4) or "analytics" (Module 5).
+    // The URL hash (#analytics) keeps the view bookmarkable.
+    const [view, setViewState] =
+        useState(() =>
+            window.location.hash === "#analytics"
+                ? "analytics"
+                : "operations"
+        );
+
+    const setView = (next) => {
+        setViewState(next);
+        window.history.replaceState(null, "", `#${next}`);
+    };
 
     const [incidents, setIncidents] =
         useState([]);
@@ -365,6 +380,27 @@ function App() {
                 </div>
 
 
+                <nav className="view-tabs" aria-label="View">
+
+                    <button
+                        type="button"
+                        className={view === "operations" ? "active" : ""}
+                        onClick={() => setView("operations")}
+                    >
+                        OPERATIONS
+                    </button>
+
+                    <button
+                        type="button"
+                        className={view === "analytics" ? "active" : ""}
+                        onClick={() => setView("analytics")}
+                    >
+                        ANALYTICS
+                    </button>
+
+                </nav>
+
+
                 <div className="system-status">
 
                     <span className="status-dot"></span>
@@ -394,6 +430,12 @@ function App() {
                 </div>
             )}
 
+
+            {view === "analytics" ? (
+
+                <AnalyticsView />
+
+            ) : (
 
             <main className="dashboard">
 
@@ -682,6 +724,8 @@ function App() {
                 </section>
 
             </main>
+
+            )}
 
         </div>
     );

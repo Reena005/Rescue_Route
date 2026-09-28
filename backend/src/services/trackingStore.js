@@ -39,6 +39,11 @@ let backend = "memory";
 const memoryLocations = new Map();
 const memoryHistory = new Map();
 
+// In-memory history entries get "mem:<boot>:<seq>" ids so export
+// cursors from an earlier run are recognised as stale
+const memoryBootId = Date.now().toString(36);
+let memorySeq = 0;
+
 
 const haversineKm = (lat1, lng1, lat2, lng2) => {
     const toRad = (deg) => (Number(deg) * Math.PI) / 180;
@@ -252,7 +257,10 @@ const appendHistory = async (location) => {
 
     const history = memoryHistory.get(location.truck_id) || [];
 
-    history.push(point);
+    history.push({
+        ...point,
+        entry_id: `mem:${memoryBootId}:${++memorySeq}`
+    });
 
     if (history.length > HISTORY_MAX_POINTS) {
         history.splice(0, history.length - HISTORY_MAX_POINTS);
@@ -280,7 +288,59 @@ const getHistory = async (truckId, limit) => {
             .reverse();
     }
 
-    return (memoryHistory.get(truckId) || []).slice(-limit);
+    return (memoryHistory.get(truckId) || [])
+        .slice(-limit)
+        .map(({ entry_id, ...point }) => point);
+};
+
+
+// GPS points recorded after `cursor` (an entry id returned by an
+// earlier call), oldest first. Used by the Module 5 exporter.
+// Returns { points, cursor } where each point has an entry_id.
+const getHistorySince = async (truckId, cursor = null) => {
+    if (redis) {
+        // An in-memory cursor from before Redis was enabled means
+        // start over
+        if (cursor?.startsWith("mem:")) {
+            cursor = null;
+        }
+
+        const reply = await redis.sendCommand([
+            "XRANGE",
+            HISTORY_PREFIX + truckId,
+            cursor ? `(${cursor}` : "-",
+            "+"
+        ]);
+
+        const points = reply.map(([id, fields]) => ({
+            ...JSON.parse(fields[1]),
+            entry_id: String(id)
+        }));
+
+        return {
+            points,
+            cursor: points.length > 0
+                ? points[points.length - 1].entry_id
+                : cursor
+        };
+    }
+
+    const history = memoryHistory.get(truckId) || [];
+
+    // A cursor from another run (or from Redis) means start over
+    const [, boot, seq] = (cursor || "").split(":");
+    const after = boot === memoryBootId ? Number(seq) : 0;
+
+    const points = history.filter(
+        (point) => Number(point.entry_id.split(":")[2]) > after
+    );
+
+    return {
+        points,
+        cursor: points.length > 0
+            ? points[points.length - 1].entry_id
+            : cursor
+    };
 };
 
 
@@ -311,6 +371,7 @@ module.exports = {
     findNearby,
     appendHistory,
     getHistory,
+    getHistorySince,
     publish,
     subscribe,
     haversineKm
