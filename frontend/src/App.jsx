@@ -3,11 +3,13 @@ import { useEffect, useState } from "react";
 import MapView from "./components/MapView";
 import IncidentForm from "./components/IncidentForm";
 import NearbyStations from "./components/NearbyStations";
+import DispatchPanel from "./components/DispatchPanel";
 
 import {
     getIncidents,
     getStations,
-    getNearbyStations
+    getNearbyStations,
+    getTrucks
 } from "./services/api";
 
 import "./App.css";
@@ -19,6 +21,9 @@ function App() {
         useState([]);
 
     const [stations, setStations] =
+        useState([]);
+
+    const [trucks, setTrucks] =
         useState([]);
 
     const [selectedIncident, setSelectedIncident] =
@@ -48,10 +53,12 @@ function App() {
 
             const [
                 incidentsData,
-                stationsData
+                stationsData,
+                trucksData
             ] = await Promise.all([
                 getIncidents(),
-                getStations()
+                getStations(),
+                getTrucks()
             ]);
 
             setIncidents(
@@ -61,6 +68,12 @@ function App() {
             setStations(
                 stationsData.stations
             );
+
+            setTrucks(
+                trucksData.trucks
+            );
+
+            return incidentsData.incidents;
 
         } catch (err) {
 
@@ -125,6 +138,47 @@ function App() {
         };
 
 
+    // Module 2: after a dispatch change, refresh incident
+    // statuses, station truck counts and the selected incident
+    const handleDispatchChanged =
+        async () => {
+
+            const updatedIncidents =
+                await loadData();
+
+            if (!selectedIncident || !updatedIncidents) {
+                return;
+            }
+
+            const updated =
+                updatedIncidents.find(
+                    (incident) =>
+                        incident.incident_id ===
+                        selectedIncident.incident_id
+                );
+
+            if (updated) {
+                setSelectedIncident(updated);
+            }
+
+            try {
+
+                const data =
+                    await getNearbyStations(
+                        selectedIncident.incident_id
+                    );
+
+                setNearbyStations(
+                    data.nearbyStations
+                );
+
+            } catch (err) {
+
+                console.error(err);
+            }
+        };
+
+
     const activeCount =
         incidents.filter(
             (incident) =>
@@ -136,6 +190,13 @@ function App() {
         incidents.filter(
             (incident) =>
                 incident.severity === "CRITICAL"
+        ).length;
+
+
+    const availableTruckCount =
+        trucks.filter(
+            (truck) =>
+                truck.status === "AVAILABLE"
         ).length;
 
 
@@ -232,6 +293,22 @@ function App() {
 
                             <strong>
                                 {stations.length}
+                            </strong>
+
+                        </div>
+
+
+                        <div className="stat-card">
+
+                            <span>
+                                TRUCKS READY
+                            </span>
+
+                            <strong>
+                                {availableTruckCount}
+                                <small>
+                                    /{trucks.length}
+                                </small>
                             </strong>
 
                         </div>
@@ -418,6 +495,16 @@ function App() {
                         }
                         loading={
                             loadingNearby
+                        }
+                    />
+
+
+                    <DispatchPanel
+                        incident={
+                            selectedIncident
+                        }
+                        onDispatchChanged={
+                            handleDispatchChanged
                         }
                     />
 

@@ -136,6 +136,15 @@ export default function MapView({
                                         {station.fire_station_phone_number}
                                     </p>
 
+                                    <p>
+                                        <strong>
+                                            Trucks ready:
+                                        </strong>{" "}
+                                        {station.available_trucks ?? 0}
+                                        {" / "}
+                                        {station.total_trucks ?? 0}
+                                    </p>
+
                                 </div>
 
                             </Popup>

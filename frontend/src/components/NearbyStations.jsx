@@ -108,8 +108,16 @@ export default function NearbyStations({
                                         } km
                                     </strong>
 
-                                    <span>
-                                        Nearest
+                                    <span
+                                        className={
+                                            station.available_trucks > 0
+                                                ? "trucks-ready"
+                                                : "trucks-none"
+                                        }
+                                    >
+                                        {station.available_trucks ?? 0}
+                                        /{station.total_trucks ?? 0}
+                                        {" "}trucks ready
                                     </span>
 
                                 </div>
