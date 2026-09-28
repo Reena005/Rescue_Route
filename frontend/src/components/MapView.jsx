@@ -35,6 +35,26 @@ L.Icon.Default.mergeOptions({
 const CHENNAI_CENTER = [13.0827, 80.2707];
 
 
+// Module 4: only trucks out on a job are drawn live
+const DEPLOYED_STATUSES = ["DISPATCHED", "EN_ROUTE", "ON_SCENE"];
+
+// One icon per truck status, created once
+const TRUCK_ICONS = Object.fromEntries(
+    DEPLOYED_STATUSES.map((status) => [
+        status,
+        L.divIcon({
+            className: "truck-marker-wrapper",
+            html:
+                `<div class="truck-marker ${status.toLowerCase()}">` +
+                "&#128658;</div>",
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+            popupAnchor: [0, -14]
+        })
+    ])
+);
+
+
 // Component for selecting an incident location
 function LocationSelector({ onLocationSelect }) {
     useMapEvents({
@@ -109,6 +129,7 @@ export default function MapView({
     selectedIncident,
     routes = [],
     routePreview,
+    liveTrucks,
     selectedLocation,
     onLocationSelect,
     onIncidentSelect
@@ -343,6 +364,76 @@ export default function MapView({
                 <FitToRoutes paths={routePaths} />
 
 
+                {/* Module 4: live positions of deployed trucks */}
+                {[...(liveTrucks?.values() || [])]
+                    .filter((truck) =>
+                        DEPLOYED_STATUSES.includes(truck.status)
+                    )
+                    .map((truck) => (
+                        <Marker
+                            key={truck.truck_id}
+                            position={[
+                                Number(truck.latitude),
+                                Number(truck.longitude)
+                            ]}
+                            icon={TRUCK_ICONS[truck.status]}
+                            zIndexOffset={1000}
+                        >
+                            <Popup>
+
+                                <div className="popup">
+
+                                    <h3>
+                                        {truck.truck_id}
+                                    </h3>
+
+                                    <p>
+                                        <strong>
+                                            Status:
+                                        </strong>{" "}
+                                        {truck.status.replace("_", " ")}
+                                    </p>
+
+                                    {truck.incident_id && (
+                                        <p>
+                                            <strong>
+                                                Incident:
+                                            </strong>{" "}
+                                            {truck.incident_id}
+                                        </p>
+                                    )}
+
+                                    {truck.speed_kmh > 0 && (
+                                        <p>
+                                            <strong>
+                                                Speed:
+                                            </strong>{" "}
+                                            {truck.speed_kmh} km/h
+                                        </p>
+                                    )}
+
+                                    {truck.remaining_km > 0 && (
+                                        <p>
+                                            <strong>
+                                                Remaining:
+                                            </strong>{" "}
+                                            {truck.remaining_km} km
+                                            {truck.remaining_eta_min !== null &&
+                                                ` (~${truck.remaining_eta_min} min)`}
+                                        </p>
+                                    )}
+
+                                    <p>
+                                        Source: {truck.source}
+                                    </p>
+
+                                </div>
+
+                            </Popup>
+                        </Marker>
+                    ))}
+
+
                 {/* New incident location */}
                 {selectedLocation && (
                     <Marker
@@ -392,6 +483,11 @@ export default function MapView({
                 <div>
                     <span className="legend-line preview-line"></span>
                     Route Preview
+                </div>
+
+                <div>
+                    <span className="legend-truck">&#128658;</span>
+                    Live Truck
                 </div>
 
             </div>

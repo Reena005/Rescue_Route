@@ -169,3 +169,24 @@ export const previewRoute = async (incidentId, truckId) => {
 
     return response.json();
 };
+
+// ============================================================
+// Module 4 — Real-Time Tracking
+// ============================================================
+
+export const getTrackedTrucks = async () => {
+    const response = await fetch(
+        `${API_BASE_URL}/tracking/trucks?deployed=true`
+    );
+
+    if (!response.ok) {
+        throw new Error("Failed to fetch truck positions");
+    }
+
+    return response.json();
+};
+
+
+// Live "location" and "dispatch" events (Server-Sent Events)
+export const openTrackingStream = () =>
+    new EventSource(`${API_BASE_URL}/tracking/stream`);
